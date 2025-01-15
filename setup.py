@@ -6,7 +6,7 @@ import urllib.request
 import zipfile
 import tarfile
 import platform
-	
+
 #  python3 setup.py built_ext --inplace
 
 VERSION = '2.0.3'
@@ -33,7 +33,7 @@ if not os.path.exists('raylib_wasm'):
         os.rename('raylib-5.0_webassembly', 'raylib_wasm')
 
     os.remove('raylib.zip')
-    
+
 #import os
 #os.environ['CFLAGS'] = '-O3 -march=native -Wall'
 
@@ -242,20 +242,21 @@ common = cleanrl + [environments[env] for env in [
 ]]
 
 extension_paths = [
-    'pufferlib/ocean/nmmo3/cy_nmmo3',
-    'pufferlib/ocean/moba/cy_moba',
-    'pufferlib/ocean/tactical/c_tactical',
-    'pufferlib/ocean/squared/cy_squared',
-    'pufferlib/ocean/snake/cy_snake',
-    'pufferlib/ocean/pong/cy_pong',
-    'pufferlib/ocean/breakout/cy_breakout',
-    'pufferlib/ocean/enduro/cy_enduro',
-    'pufferlib/ocean/connect4/cy_connect4',
-    'pufferlib/ocean/grid/cy_grid',
-    'pufferlib/ocean/tripletriad/cy_tripletriad',
-    'pufferlib/ocean/go/cy_go',
-    'pufferlib/ocean/rware/cy_rware',
-    'pufferlib/ocean/trash_pickup/cy_trash_pickup'
+    # Don't build the ocean.
+    # 'pufferlib/ocean/nmmo3/cy_nmmo3',
+    # 'pufferlib/ocean/moba/cy_moba',
+    # 'pufferlib/ocean/tactical/c_tactical',
+    # 'pufferlib/ocean/squared/cy_squared',
+    # 'pufferlib/ocean/snake/cy_snake',
+    # 'pufferlib/ocean/pong/cy_pong',
+    # 'pufferlib/ocean/breakout/cy_breakout',
+    # 'pufferlib/ocean/enduro/cy_enduro',
+    # 'pufferlib/ocean/connect4/cy_connect4',
+    # 'pufferlib/ocean/grid/cy_grid',
+    # 'pufferlib/ocean/tripletriad/cy_tripletriad',
+    # 'pufferlib/ocean/go/cy_go',
+    # 'pufferlib/ocean/rware/cy_rware',
+    # 'pufferlib/ocean/trash_pickup/cy_trash_pickup'
 ]
 
 system = platform.system()
@@ -282,7 +283,7 @@ extensions = [Extension(
     extra_link_args=[rpath_arg]
 
 ) for path in extension_paths]
- 
+
 setup(
     name="pufferlib",
     description="PufferAI Library"
@@ -321,7 +322,7 @@ setup(
         "pufferlib/puffernet.pyx",
         "pufferlib/ocean/grid/c_grid.pyx",
         *extensions,
-    ], 
+    ],
     compiler_directives={
         'language_level': 3,
         'boundscheck': False,
@@ -358,6 +359,6 @@ setup(
 #'git+https://github.com/oxwhirl/smac.git',
 
 #curl -L -o smac.zip https://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
-#unzip -P iagreetotheeula smac.zip 
+#unzip -P iagreetotheeula smac.zip
 #curl -L -o maps.zip https://github.com/oxwhirl/smac/releases/download/v0.1-beta1/SMAC_Maps.zip
 #unzip maps.zip && mv SMAC_Maps/ StarCraftII/Maps/
