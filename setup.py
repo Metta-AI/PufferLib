@@ -40,7 +40,7 @@ if not os.path.exists(RAYLIB_WASM):
     with zipfile.ZipFile(RAYLIB_WASM + '.zip', 'r') as zip_ref:
         zip_ref.extractall()
         if os.path.exists('raylib_wasm'):
-            os.rmdir('raylib_wasm')
+            os.rename('raylib_wasm', 'raylib_wasm_old')
         os.rename('raylib-5.0_webassembly', 'raylib_wasm')
 
 #import os
