@@ -6,7 +6,7 @@ import urllib.request
 import zipfile
 import tarfile
 import platform
-	
+
 #  python3 setup.py built_ext --inplace
 
 VERSION = '2.0.6'
@@ -39,6 +39,13 @@ if not os.path.exists(RAYLIB_WASM):
     urllib.request.urlretrieve(RAYLIB_WASM_URL, RAYLIB_WASM + '.zip')
     with zipfile.ZipFile(RAYLIB_WASM + '.zip', 'r') as zip_ref:
         zip_ref.extractall()
+        os.rename('raylib-5.0_webassembly', 'raylib_wasm')
+
+    os.remove('raylib.zip')
+
+#import os
+#os.environ['CFLAGS'] = '-O3 -march=native -Wall'
+
 
     os.remove(RAYLIB_WASM + '.zip')
 
@@ -246,20 +253,21 @@ common = cleanrl + [environments[env] for env in [
 ]]
 
 extension_paths = [
-    'pufferlib/ocean/nmmo3/cy_nmmo3',
-    'pufferlib/ocean/moba/cy_moba',
-    'pufferlib/ocean/tactical/c_tactical',
-    'pufferlib/ocean/squared/cy_squared',
-    'pufferlib/ocean/snake/cy_snake',
-    'pufferlib/ocean/pong/cy_pong',
-    'pufferlib/ocean/breakout/cy_breakout',
-    'pufferlib/ocean/enduro/cy_enduro',
-    'pufferlib/ocean/connect4/cy_connect4',
-    'pufferlib/ocean/grid/cy_grid',
-    'pufferlib/ocean/tripletriad/cy_tripletriad',
-    'pufferlib/ocean/go/cy_go',
-    'pufferlib/ocean/rware/cy_rware',
-    'pufferlib/ocean/trash_pickup/cy_trash_pickup'
+    # Don't build the ocean.
+    # 'pufferlib/ocean/nmmo3/cy_nmmo3',
+    # 'pufferlib/ocean/moba/cy_moba',
+    # 'pufferlib/ocean/tactical/c_tactical',
+    # 'pufferlib/ocean/squared/cy_squared',
+    # 'pufferlib/ocean/snake/cy_snake',
+    # 'pufferlib/ocean/pong/cy_pong',
+    # 'pufferlib/ocean/breakout/cy_breakout',
+    # 'pufferlib/ocean/enduro/cy_enduro',
+    # 'pufferlib/ocean/connect4/cy_connect4',
+    # 'pufferlib/ocean/grid/cy_grid',
+    # 'pufferlib/ocean/tripletriad/cy_tripletriad',
+    # 'pufferlib/ocean/go/cy_go',
+    # 'pufferlib/ocean/rware/cy_rware',
+    # 'pufferlib/ocean/trash_pickup/cy_trash_pickup'
 ]
 
 system = platform.system()
@@ -286,19 +294,6 @@ extensions = [Extension(
     extra_link_args=['-Bsymbolic-functions', '-O2', '-fwrapv'],
     extra_objects=[f'{RAYLIB_LIB}/libraylib.a']
 ) for path in extension_paths]
-
-# Prevent Conda from injecting garbage compile flags
-from distutils.sysconfig import get_config_vars
-cfg_vars = get_config_vars()
-for key in ('CC', 'CXX', 'LDSHARED'):
-    if cfg_vars[key]:
-        cfg_vars[key] = cfg_vars[key].replace('-B /root/anaconda3/compiler_compat', '')
-        cfg_vars[key] = cfg_vars[key].replace('-pthread', '')
-        cfg_vars[key] = cfg_vars[key].replace('-fno-strict-overflow', '')
-
-for key, value in cfg_vars.items():
-    if value and '-fno-strict-overflow' in str(value):
-        cfg_vars[key] = value.replace('-fno-strict-overflow', '')
 
 setup(
     name="pufferlib",
@@ -340,7 +335,7 @@ setup(
         "pufferlib/puffernet.pyx",
         "pufferlib/ocean/grid/c_grid.pyx",
         *extensions,
-    ], 
+    ],
     compiler_directives={
         'language_level': 3,
         'boundscheck': False,
@@ -377,6 +372,6 @@ setup(
 #'git+https://github.com/oxwhirl/smac.git',
 
 #curl -L -o smac.zip https://blzdistsc2-a.akamaihd.net/Linux/SC2.4.10.zip
-#unzip -P iagreetotheeula smac.zip 
+#unzip -P iagreetotheeula smac.zip
 #curl -L -o maps.zip https://github.com/oxwhirl/smac/releases/download/v0.1-beta1/SMAC_Maps.zip
 #unzip maps.zip && mv SMAC_Maps/ StarCraftII/Maps/
