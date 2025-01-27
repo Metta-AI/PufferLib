@@ -149,3 +149,5 @@ checkpoints/
 experiments/
 wandb/
 raylib/
+.vscode/launch.json
+raylib-5.0_*
