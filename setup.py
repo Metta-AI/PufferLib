@@ -41,8 +41,6 @@ if not os.path.exists(RAYLIB_WASM):
         zip_ref.extractall()
         os.rename('raylib-5.0_webassembly', 'raylib_wasm')
 
-    os.remove('raylib.zip')
-
 #import os
 #os.environ['CFLAGS'] = '-O3 -march=native -Wall'
 
