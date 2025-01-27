@@ -6,6 +6,7 @@ import urllib.request
 import zipfile
 import tarfile
 import platform
+import shutil
 
 #  python3 setup.py built_ext --inplace
 
@@ -33,21 +34,22 @@ if not os.path.exists(RAYLIB_MACOS):
 
     os.remove(RAYLIB_MACOS + '.tar.gz')
 
-RAYLIB_WASM = 'raylib-5.0_webassembly'
-RAYLIB_WASM_URL = RAYLIB_BASE + RAYLIB_WASM + '.zip'
-if not os.path.exists(RAYLIB_WASM):
-    urllib.request.urlretrieve(RAYLIB_WASM_URL, RAYLIB_WASM + '.zip')
-    with zipfile.ZipFile(RAYLIB_WASM + '.zip', 'r') as zip_ref:
-        zip_ref.extractall()
-        if os.path.exists('raylib_wasm'):
-            os.rename('raylib_wasm', 'raylib_wasm_old')
-        os.rename('raylib-5.0_webassembly', 'raylib_wasm')
+# RAYLIB_WASM = 'raylib-5.0_webassembly'
+# RAYLIB_WASM_URL = RAYLIB_BASE + RAYLIB_WASM + '.zip'
+# if not os.path.exists(RAYLIB_WASM):
+#     urllib.request.urlretrieve(RAYLIB_WASM_URL, RAYLIB_WASM + '.zip')
+#     with zipfile.ZipFile(RAYLIB_WASM + '.zip', 'r') as zip_ref:
+#         zip_ref.extractall()
+#         if os.path.exists('raylib_wasm'):
+#             # move old directory to new name
+#             os.rename('raylib_wasm', 'raylib_wasm_old')
+#         os.rename('raylib-5.0_webassembly', 'raylib_wasm')
 
 #import os
 #os.environ['CFLAGS'] = '-O3 -march=native -Wall'
 
 
-    os.remove(RAYLIB_WASM + '.zip')
+    # os.remove(RAYLIB_WASM + '.zip')
 
 # Default Gym/Gymnasium/PettingZoo versions
 # Gym:
