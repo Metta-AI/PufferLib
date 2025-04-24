@@ -303,7 +303,7 @@ setup(
     "PufferAI's library of RL tools and utilities",
     long_description_content_type="text/markdown",
     version=VERSION,
-    packages=packages=find_packages(where="pufferlib"),
+    packages=find_packages(where="pufferlib"),
     package_dir={"": "pufferlib"},
     package_data={
         "pufferlib": [
