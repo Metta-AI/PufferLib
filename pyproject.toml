@@ -4,10 +4,6 @@ version = "2.0.6"
 dependencies = ["numpy", "Cython"]
 requires-python = ">=3.9"
 
-[build-system]
-requires = ["setuptools", "wheel", "Cython", "numpy"]
-build-backend = "setuptools.build_meta"
-
 [tool.setuptools.packages.find]
 where = ["pufferlib"]
 
