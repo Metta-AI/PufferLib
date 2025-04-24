@@ -1,4 +1,4 @@
-from setuptools import find_packages, find_namespace_packages, setup, Extension
+from setuptools import find_packages, setup, Extension
 from Cython.Build import cythonize
 import numpy
 import os
@@ -303,7 +303,8 @@ setup(
     "PufferAI's library of RL tools and utilities",
     long_description_content_type="text/markdown",
     version=VERSION,
-    packages=find_namespace_packages() + find_packages(),
+    packages=packages=find_packages(where="pufferlib"),
+    package_dir={"": "pufferlib"},
     package_data={
         "pufferlib": [
             f'{RAYLIB_LIB}/libraylib.a',
@@ -336,7 +337,7 @@ setup(
         "c_gae.pyx",
         "pufferlib/puffernet.pyx",
         "pufferlib/ocean/grid/c_grid.pyx",
-        *extensions,
+        *[f"pufferlib/{path}.pyx" for path in extension_paths],
     ],
     compiler_directives={
         'language_level': 3,
