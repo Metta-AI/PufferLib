@@ -336,7 +336,7 @@ setup(
         "c_gae.pyx",
         "pufferlib/puffernet.pyx",
         "pufferlib/ocean/grid/c_grid.pyx",
-        *[f"pufferlib/{path}.pyx" for path in extension_paths],
+        *extensions,
     ],
     compiler_directives={
         'language_level': 3,
