@@ -3,6 +3,7 @@ name = "pufferlib"
 version = "2.0.6"
 dependencies = ["numpy", "Cython"]
 requires-python = ">=3.9"
+dynamic = ["description", "license", "authors", "keywords"]
 
 [tool.setuptools.packages.find]
 where = ["pufferlib"]
