@@ -1,10 +1,10 @@
 # docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
-import configparser
 import argparse
+import ast
+import configparser
+import os
 import random
 import time
-import ast
-import os
 from types import SimpleNamespace
 
 import gymnasium
@@ -16,7 +16,6 @@ import torch.optim as optim
 import pufferlib.cleanrl
 from pufferlib.environments.mujoco.environment import cleanrl_env_creator
 from pufferlib.environments.mujoco.policy import CleanRLPolicy, Policy
-
 
 if __name__ == "__main__":
     # Simpler args parse just for this script. Configs are read from file ONLY.
@@ -32,23 +31,23 @@ if __name__ == "__main__":
     args = parser.parse_known_args()[0]
 
     if not os.path.exists(args.config):
-        raise Exception(f'Config {args.config} not found')
+        raise Exception(f"Config {args.config} not found")
 
     p = configparser.ConfigParser()
     p.read(args.config)
-    assert args.env_id in p['base']['env_name'].split(), f"Env {args.env_id} not found in {args.config}"
+    assert args.env_id in p["base"]["env_name"].split(), f"Env {args.env_id} not found in {args.config}"
 
     for section in p.sections():
         for key in p[section]:
-            argparse_key = f'--{section}.{key}'.replace('_', '-')
+            argparse_key = f"--{section}.{key}".replace("_", "-")
             parser.add_argument(argparse_key, default=p[section][key])
 
     parsed = parser.parse_args().__dict__
-    args_dict = {'env': {}, 'policy': {}, 'rnn': {}}
-    env_name = parsed.pop('env_id')
+    args_dict = {"env": {}, "policy": {}, "rnn": {}}
+    env_name = parsed.pop("env_id")
     for key, value in parsed.items():
         next = args_dict
-        for subkey in key.split('.'):
+        for subkey in key.split("."):
             if subkey not in next:
                 next[subkey] = {}
             prev = next
@@ -84,6 +83,7 @@ if __name__ == "__main__":
     wandb = None
     if args.track:
         import wandb
+
         wandb.init(
             project=args.wandb_project,
             group=args.wandb_group,
@@ -107,30 +107,21 @@ if __name__ == "__main__":
 
     # env setup
     envs = gymnasium.vector.SyncVectorEnv(
-        [
-            cleanrl_env_creator(args.env_id, run_name, args.capture_video, args.gamma, i)
-            for i in range(args.num_envs)
-        ]
+        [cleanrl_env_creator(args.env_id, run_name, args.capture_video, args.gamma, i) for i in range(args.num_envs)]
     )
-    assert isinstance(
-        envs.single_action_space, gymnasium.spaces.Box
-    ), "only continuous action space is supported"
+    assert isinstance(envs.single_action_space, gymnasium.spaces.Box), "only continuous action space is supported"
 
     if args.policy == "cleanrl":
         policy = CleanRLPolicy(envs)
     elif args.policy == "puffer":
         policy = Policy(envs)
-    
+
     agent = pufferlib.cleanrl.Policy(policy).to(device)
     optimizer = optim.Adam(agent.parameters(), lr=args.learning_rate, eps=1e-5)
 
     # ALGO Logic: Storage setup
-    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(
-        device
-    )
-    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(
-        device
-    )
+    obs = torch.zeros((args.num_steps, args.num_envs) + envs.single_observation_space.shape).to(device)
+    actions = torch.zeros((args.num_steps, args.num_envs) + envs.single_action_space.shape).to(device)
     logprobs = torch.zeros((args.num_steps, args.num_envs)).to(device)
     rewards = torch.zeros((args.num_steps, args.num_envs)).to(device)
     dones = torch.zeros((args.num_steps, args.num_envs)).to(device)
@@ -174,9 +165,7 @@ if __name__ == "__main__":
             if "final_info" in infos:
                 for info in infos["final_info"]:
                     if info and "episode_return" in info:
-                        print(
-                            f"global_step: {global_step}, episode_return: {int(info['episode_return'])}"
-                        )
+                        print(f"global_step: {global_step}, episode_return: {int(info['episode_return'])}")
                         episode_stats["episode_return"].append(info["episode_return"])
                         episode_stats["episode_length"].append(info["episode_length"])
 
@@ -193,9 +182,7 @@ if __name__ == "__main__":
                     nextnonterminal = 1.0 - dones[t + 1]
                     nextvalues = values[t + 1]
                 delta = rewards[t] + args.gamma * nextvalues * nextnonterminal - values[t]
-                advantages[t] = lastgaelam = (
-                    delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
-                )
+                advantages[t] = lastgaelam = delta + args.gamma * args.gae_lambda * nextnonterminal * lastgaelam
             returns = advantages + values
 
         # flatten the batch
@@ -215,9 +202,7 @@ if __name__ == "__main__":
                 end = start + args.minibatch_size
                 mb_inds = b_inds[start:end]
 
-                _, newlogprob, entropy, newvalue = agent.get_action_and_value(
-                    b_obs[mb_inds], b_actions[mb_inds]
-                )
+                _, newlogprob, entropy, newvalue = agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
                 logratio = newlogprob - b_logprobs[mb_inds]
                 ratio = logratio.exp()
 
@@ -229,15 +214,11 @@ if __name__ == "__main__":
 
                 mb_advantages = b_advantages[mb_inds]
                 if args.norm_adv:
-                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (
-                        mb_advantages.std() + 1e-8
-                    )
+                    mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
                 # Policy loss
                 pg_loss1 = -mb_advantages * ratio
-                pg_loss2 = -mb_advantages * torch.clamp(
-                    ratio, 1 - args.clip_coef, 1 + args.clip_coef
-                )
+                pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - args.clip_coef, 1 + args.clip_coef)
                 pg_loss = torch.max(pg_loss1, pg_loss2).mean()
 
                 # Value loss

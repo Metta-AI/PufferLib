@@ -5,8 +5,6 @@ import torch.nn as nn
 import pufferlib
 from pufferlib.pytorch import layer_init
 
-from pufferlib.models import Default as Policy
-
 
 # Puffer LSTMWrapper does NOT support separate critic networks for now
 # Would be good to test he performance between these architectures
@@ -31,9 +29,7 @@ class CleanRLPolicy(torch.nn.Module):
             nn.Tanh(),
         )
 
-        self.actor_decoder_mean = layer_init(
-            nn.Linear(hidden_size, env.single_action_space.shape[0]), std=0.01
-        )
+        self.actor_decoder_mean = layer_init(nn.Linear(hidden_size, env.single_action_space.shape[0]), std=0.01)
         self.actor_decoder_logstd = nn.Parameter(torch.zeros(1, env.single_action_space.shape[0]))
 
         self.critic = nn.Sequential(
@@ -62,7 +58,7 @@ class CleanRLPolicy(torch.nn.Module):
     def decode_actions(self, hidden, lookup, concat=True):
         """Decodes a batch of hidden states into (multi)discrete actions.
         Assumes no time dimension (handled by LSTM wrappers)."""
-        #value = self.value_head(hidden)
+        # value = self.value_head(hidden)
 
         mean = self.actor_decoder_mean(hidden)
         logstd = self.actor_decoder_logstd.expand_as(mean)

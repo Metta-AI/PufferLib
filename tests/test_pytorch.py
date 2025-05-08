@@ -2,11 +2,10 @@ from typing import Any, Dict, List, Tuple
 
 import gymnasium as gym
 import numpy as np
-import torch
-import pytest
-
 import pufferlib
 import pufferlib.emulation
+import pytest
+import torch
 from pufferlib.pytorch import NativeDType, nativize_dtype, nativize_tensor
 
 
@@ -109,7 +108,10 @@ from pufferlib.pytorch import NativeDType, nativize_dtype, nativize_tensor
             np.dtype(
                 [
                     ("xx", np.float32, (1, 2)),
-                    ("yy", [("aa", np.uint8, (7, 7)), ("bb", np.int32, (2, 3))],),
+                    (
+                        "yy",
+                        [("aa", np.uint8, (7, 7)), ("bb", np.int32, (2, 3))],
+                    ),
                 ],
                 align=True,
             ),
@@ -123,9 +125,7 @@ from pufferlib.pytorch import NativeDType, nativize_dtype, nativize_tensor
         ),
     ],
 )
-def test_nativize_dtype(
-    observation_dtype: np.array, emulated_dtype: np.array, expected: NativeDType
-):
+def test_nativize_dtype(observation_dtype: np.array, emulated_dtype: np.array, expected: NativeDType):
     assert expected == nativize_dtype(
         pufferlib.namespace(
             observation_dtype=observation_dtype,
@@ -172,18 +172,14 @@ def test_nativize_dtype(
 )
 def test_nativize_tensor(space: gym.spaces.Space, sample_dtype: np.dtype):
     emulated_dtype = pufferlib.emulation.dtype_from_space(space)
-    observation_space, observation_dtype = (
-        pufferlib.emulation.emulate_observation_space(space)
-    )
+    observation_space, observation_dtype = pufferlib.emulation.emulate_observation_space(space)
     native_dtype = nativize_dtype(
         pufferlib.namespace(
             observation_dtype=sample_dtype,
             emulated_observation_dtype=emulated_dtype,
         )
     )
-    flat = np.zeros(observation_space.shape, dtype=observation_space.dtype).view(
-        observation_dtype
-    )
+    flat = np.zeros(observation_space.shape, dtype=observation_space.dtype).view(observation_dtype)
     structured = space.sample()
     pufferlib.emulation.emulate(flat, structured)
 
@@ -204,8 +200,7 @@ def test_nativize_tensor(space: gym.spaces.Space, sample_dtype: np.dtype):
     observation = torch.tensor(flat.view(observation_space.dtype)).unsqueeze(0)
     nativized_tensor = nativize_tensor(observation, native_dtype)
     assert all(
-        nx == ny and np.all(vx == vy)
-        for (nx, vx), (ny, vy) in zip(flatten(nativized_tensor), flatten(structured))
+        nx == ny and np.all(vx == vy) for (nx, vx), (ny, vy) in zip(flatten(nativized_tensor), flatten(structured), strict=False)
     )
     explain_out = torch._dynamo.explain(nativize_tensor)(observation, native_dtype)
     assert len(explain_out.break_reasons) == 0

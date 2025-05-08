@@ -1,11 +1,10 @@
-from torch import nn
+
 import torch
-import torch.nn.functional as F
+from torch import nn
 
-from functools import partial
 import pufferlib.models
-
 from pufferlib.models import Default as Policy
+
 Recurrent = pufferlib.models.LSTMWrapper
 
 EGO_STATE_DIM = 6
@@ -14,7 +13,8 @@ ROAD_MAP_DIM = 13
 
 MAX_CONTROLLED_VEHICLES = 32
 ROADMAP_AGENT_FEAT_DIM = MAX_CONTROLLED_VEHICLES - 1
-TOP_K_ROADPOINTS = 64 # Number of visible roadpoints from the road graph
+TOP_K_ROADPOINTS = 64  # Number of visible roadpoints from the road graph
+
 
 def unpack_obs(obs_flat):
     """
@@ -26,22 +26,21 @@ def unpack_obs(obs_flat):
     """
     # Unpack ego and visible state
     ego_state = obs_flat[:, :EGO_STATE_DIM]
-    vis_state = obs_flat[:, EGO_STATE_DIM :]
-                                                                                                                   # Visible state object order: road_objects, road_points
+    vis_state = obs_flat[:, EGO_STATE_DIM:]
+    # Visible state object order: road_objects, road_points
     # Find the ends of each section
     ro_end_idx = PARTNER_DIM * ROADMAP_AGENT_FEAT_DIM
     rg_end_idx = ro_end_idx + (ROAD_MAP_DIM * TOP_K_ROADPOINTS)
-    
+
     # Unflatten and reshape to (batch_size, num_objects, object_dim)
-    road_objects = (vis_state[:, :ro_end_idx]).reshape(
-        -1, ROADMAP_AGENT_FEAT_DIM, PARTNER_DIM
-    )
+    road_objects = (vis_state[:, :ro_end_idx]).reshape(-1, ROADMAP_AGENT_FEAT_DIM, PARTNER_DIM)
     road_graph = (vis_state[:, ro_end_idx:rg_end_idx]).reshape(
         -1,
         TOP_K_ROADPOINTS,
         ROAD_MAP_DIM,
     )
     return ego_state, road_objects, road_graph
+
 
 class Policy(nn.Module):
     def __init__(self, env, input_size=64, hidden_size=128, **kwargs):
@@ -64,12 +63,10 @@ class Policy(nn.Module):
             pufferlib.pytorch.layer_init(nn.Linear(input_size, input_size)),
         )
 
-        self.proj = pufferlib.pytorch.layer_init(nn.Linear(3*input_size, hidden_size))
+        self.proj = pufferlib.pytorch.layer_init(nn.Linear(3 * input_size, hidden_size))
 
-        self.actor = pufferlib.pytorch.layer_init(
-            nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
-        self.value_fn = pufferlib.pytorch.layer_init(
-            nn.Linear(hidden_size, 1), std=1)
+        self.actor = pufferlib.pytorch.layer_init(nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
+        self.value_fn = pufferlib.pytorch.layer_init(nn.Linear(hidden_size, 1), std=1)
 
     def forward(self, observations):
         hidden, lookup = self.encode_observations(observations)

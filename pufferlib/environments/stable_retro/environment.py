@@ -1,27 +1,26 @@
-from pdb import set_trace as T
-import numpy as np
+import functools
 
 import gymnasium as gym
-import functools
+import numpy as np
 
 import pufferlib
 import pufferlib.emulation
 import pufferlib.environments
 
 
-def env_creator(name='Airstriker-Genesis'):
+def env_creator(name="Airstriker-Genesis"):
     return functools.partial(make, name)
 
-def make(name='Airstriker-Genesis', framestack=4, buf=None):
-    '''Atari creation function with default CleanRL preprocessing based on Stable Baselines3 wrappers'''
-    retro = pufferlib.environments.try_import('retro', 'stable-retro')
+
+def make(name="Airstriker-Genesis", framestack=4, buf=None):
+    """Atari creation function with default CleanRL preprocessing based on Stable Baselines3 wrappers"""
+    retro = pufferlib.environments.try_import("retro", "stable-retro")
 
     from stable_baselines3.common.atari_wrappers import (
         ClipRewardEnv,
-        EpisodicLifeEnv,
-        FireResetEnv,
         MaxAndSkipEnv,
     )
+
     with pufferlib.utils.Suppress():
         env = retro.make(name)
 
@@ -31,8 +30,8 @@ def make(name='Airstriker-Genesis', framestack=4, buf=None):
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayScaleObservation(env)
     env = gym.wrappers.FrameStack(env, framestack)
-    return pufferlib.emulation.GymnasiumPufferEnv(
-        env=env, postprocessor_cls=AtariFeaturizer, buf=buf)
+    return pufferlib.emulation.GymnasiumPufferEnv(env=env, postprocessor_cls=AtariFeaturizer, buf=buf)
+
 
 class AtariFeaturizer(pufferlib.emulation.Postprocessor):
     def reset(self, obs):
@@ -40,8 +39,8 @@ class AtariFeaturizer(pufferlib.emulation.Postprocessor):
         self.epoch_length = 0
         self.done = False
 
-    #@property
-    #def observation_space(self):
+    # @property
+    # def observation_space(self):
     #    return gym.spaces.Box(0, 255, (1, 84, 84), dtype=np.uint8)
 
     def observation(self, obs):
@@ -50,11 +49,11 @@ class AtariFeaturizer(pufferlib.emulation.Postprocessor):
 
     def reward_done_truncated_info(self, reward, done, truncated, info):
         return reward, done, truncated, info
-        if 'lives' in info:
-            if info['lives'] == 0 and done:
-                info['return'] = info['episode']['r']
-                info['length'] = info['episode']['l']
-                info['time'] = info['episode']['t']
+        if "lives" in info:
+            if info["lives"] == 0 and done:
+                info["return"] = info["episode"]["r"]
+                info["length"] = info["episode"]["l"]
+                info["time"] = info["episode"]["t"]
                 return reward, True, info
             return reward, False, info
 
@@ -62,8 +61,8 @@ class AtariFeaturizer(pufferlib.emulation.Postprocessor):
             return reward, done, info
 
         if done:
-            info['return'] = self.epoch_return
-            info['length'] = self.epoch_length
+            info["return"] = self.epoch_return
+            info["length"] = self.epoch_length
             self.done = True
         else:
             self.epoch_length += 1

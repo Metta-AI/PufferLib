@@ -30,13 +30,11 @@ import os
 import cv2
 import gym
 import numpy as np
-from numba import njit
 from nle import nethack
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
+from numba import njit
+from PIL import Image, ImageDraw, ImageFont
 
-#import render_utils
+# import render_utils
 
 SMALL_FONT_PATH = os.path.join(__package__.replace(".", "/"), "Hack-Regular.ttf")
 
@@ -93,9 +91,7 @@ def _tile_characters_to_image(
             color = colors[h_char, w_char]
             h_pixel = h * char_height
             w_pixel = w * char_width
-            out_image[
-                :, h_pixel : h_pixel + char_height, w_pixel : w_pixel + char_width
-            ] = char_array[char, color]
+            out_image[:, h_pixel : h_pixel + char_height, w_pixel : w_pixel + char_width] = char_array[char, color]
 
 
 def _initialize_char_array(font_size, rescale_font_size):
@@ -106,9 +102,7 @@ def _initialize_char_array(font_size, rescale_font_size):
     Returns a np array of (num_chars, num_colors, char_height, char_width, 3)
     """
     font = ImageFont.truetype(SMALL_FONT_PATH, font_size)
-    dummy_text = "".join(
-        [(chr(i) if chr(i).isprintable() else " ") for i in range(256)]
-    )
+    dummy_text = "".join([(chr(i) if chr(i).isprintable() else " ") for i in range(256)])
     _, _, image_width, image_height = font.getbbox(dummy_text)
     # Above can not be trusted (or its siblings)....
     image_width = int(np.ceil(image_width / 256) * 256)
@@ -168,11 +162,9 @@ class RenderCharImagesWithNumpyWrapper(gym.Wrapper):
             self.output_width_chars * self.char_width,
         )
 
-        self.observation_space = gym.spaces.Box(
-            low=0, high=255, shape=self.chw_image_shape, dtype=np.uint8
-        )
- 
-        '''
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=self.chw_image_shape, dtype=np.uint8)
+
+        """
         obs_spaces = {
             "screen_image": gym.spaces.Box(
                 low=0, high=255, shape=self.chw_image_shape, dtype=np.uint8
@@ -186,9 +178,9 @@ class RenderCharImagesWithNumpyWrapper(gym.Wrapper):
             ]
         )
         self.observation_space = gym.spaces.Dict(obs_spaces)
-        '''
+        """
 
-        self.render_mode = 'rgb_array'
+        self.render_mode = "rgb_array"
 
     def _render_text_to_image(self, obs):
         chars = obs["tty_chars"]
@@ -235,7 +227,7 @@ class RenderCharImagesWithNumpyWrapper(gym.Wrapper):
         obs = self._render_text_to_image(obs)
         return obs
 
-    def render(self, mode='rgb_array'):
+    def render(self, mode="rgb_array"):
         return self.obs
 
 
@@ -269,11 +261,7 @@ class RenderCharImagesWithNumpyWrapperV2(gym.Wrapper):
             crop_cols * self.char_width,
         )
 
-        obs_spaces = {
-            "screen_image": gym.spaces.Box(
-                low=0, high=255, shape=self.chw_image_shape, dtype=np.uint8
-            )
-        }
+        obs_spaces = {"screen_image": gym.spaces.Box(low=0, high=255, shape=self.chw_image_shape, dtype=np.uint8)}
         obs_spaces.update(
             [
                 (k, self.env.observation_space[k])

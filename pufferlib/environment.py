@@ -1,12 +1,13 @@
 import numpy as np
 
-from pufferlib.exceptions import APIUsageError
 import pufferlib.spaces
+from pufferlib.exceptions import APIUsageError
 
-ERROR = '''
+ERROR = """
 Environment missing required attribute {}. The most common cause is
 calling super() before you have assigned the attribute.
-'''
+"""
+
 
 def set_buffers(env, buf=None):
     if buf is None:
@@ -31,25 +32,28 @@ def set_buffers(env, buf=None):
         env.masks = buf.masks
         env.actions = buf.actions
 
+
 class PufferEnv:
     def __init__(self, buf=None):
-        if not hasattr(self, 'single_observation_space'):
-            raise APIUsageError(ERROR.format('single_observation_space'))
-        if not hasattr(self, 'single_action_space'):
-            raise APIUsageError(ERROR.format('single_action_space'))
-        if not hasattr(self, 'num_agents'):
-            raise APIUsageError(ERROR.format('num_agents'))
+        if not hasattr(self, "single_observation_space"):
+            raise APIUsageError(ERROR.format("single_observation_space"))
+        if not hasattr(self, "single_action_space"):
+            raise APIUsageError(ERROR.format("single_action_space"))
+        if not hasattr(self, "num_agents"):
+            raise APIUsageError(ERROR.format("num_agents"))
 
-        if hasattr(self, 'observation_space'):
-            raise APIUsageError('PufferEnvs must define single_observation_space, not observation_space')
-        if hasattr(self, 'action_space'):
-            raise APIUsageError('PufferEnvs must define single_action_space, not action_space')
+        if hasattr(self, "observation_space"):
+            raise APIUsageError("PufferEnvs must define single_observation_space, not observation_space")
+        if hasattr(self, "action_space"):
+            raise APIUsageError("PufferEnvs must define single_action_space, not action_space")
         if not isinstance(self.single_observation_space, pufferlib.spaces.Box):
-            raise APIUsageError('Native observation_space must be a Box')
-        if (not isinstance(self.single_action_space, pufferlib.spaces.Discrete)
-                and not isinstance(self.single_action_space, pufferlib.spaces.MultiDiscrete)
-                and not isinstance(self.single_action_space, pufferlib.spaces.Box)):
-            raise APIUsageError('Native action_space must be a Discrete, MultiDiscrete, or Box')
+            raise APIUsageError("Native observation_space must be a Box")
+        if (
+            not isinstance(self.single_action_space, pufferlib.spaces.Discrete)
+            and not isinstance(self.single_action_space, pufferlib.spaces.MultiDiscrete)
+            and not isinstance(self.single_action_space, pufferlib.spaces.Box)
+        ):
+            raise APIUsageError("Native action_space must be a Discrete, MultiDiscrete, or Box")
 
         set_buffers(self, buf)
 
@@ -59,17 +63,17 @@ class PufferEnv:
 
     @property
     def emulated(self):
-        '''Native envs do not use emulation'''
+        """Native envs do not use emulation"""
         return False
 
     @property
     def done(self):
-        '''Native envs handle resets internally'''
+        """Native envs handle resets internally"""
         return False
 
     @property
     def driver_env(self):
-        '''For compatibility with Multiprocessing'''
+        """For compatibility with Multiprocessing"""
         return self
 
     def reset(self, seed=None):
@@ -83,12 +87,37 @@ class PufferEnv:
 
     def async_reset(self, seed=None):
         _, self.infos = self.reset(seed)
-        assert isinstance(self.infos, list), 'PufferEnvs must return info as a list of dicts'
+        assert isinstance(self.infos, list), "PufferEnvs must return info as a list of dicts"
 
     def send(self, actions):
         _, _, _, _, self.infos = self.step(actions)
-        assert isinstance(self.infos, list), 'PufferEnvs must return info as a list of dicts'
+        assert isinstance(self.infos, list), "PufferEnvs must return info as a list of dicts"
 
     def recv(self):
-        return (self.observations, self.rewards, self.terminals,
-            self.truncations, self.infos, self.agent_ids, self.masks)
+        return (
+            self.observations,
+            self.rewards,
+            self.terminals,
+            self.truncations,
+            self.infos,
+            self.agent_ids,
+            self.masks,
+        )
+
+    # Add stub methods for action-related functionality
+    def action_names(self) -> list[str]:
+        """Return the list of action names.
+
+        Raises:
+            NotImplementedError: If the environment doesn't implement this method.
+        """
+        raise NotImplementedError("This environment doesn't support action_names()")
+
+    @property
+    def _c_env(self):
+        """Access to the C++ environment.
+
+        Raises:
+            NotImplementedError: If the environment doesn't have a C++ extension.
+        """
+        raise NotImplementedError("This environment doesn't have a C++ extension")

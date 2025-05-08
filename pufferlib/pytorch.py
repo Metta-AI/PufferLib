@@ -1,14 +1,12 @@
-import sys
-from pdb import set_trace as T
-from typing import Dict, List, Tuple, Union
 import contextlib
+import sys
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
 from torch import nn
 
 import pufferlib
-
 
 numpy_to_torch_dtype_dict = {
     np.dtype("float64"): torch.float64,
@@ -58,12 +56,12 @@ def nativize_dtype(emulated: pufferlib.namespace) -> NativeDType:
     else:
         return subviews
 
-def round_to(x, base):
-    return int(base * np.ceil(x/base))
 
-def _nativize_dtype(sample_dtype: np.dtype,
-        structured_dtype: np.dtype,
-        offset: int = 0) -> NativeDType:
+def round_to(x, base):
+    return int(base * np.ceil(x / base))
+
+
+def _nativize_dtype(sample_dtype: np.dtype, structured_dtype: np.dtype, offset: int = 0) -> NativeDType:
     if structured_dtype.fields is None:
         if structured_dtype.subdtype is not None:
             dtype, shape = structured_dtype.subdtype
@@ -84,8 +82,7 @@ def _nativize_dtype(sample_dtype: np.dtype,
         start_offset = offset
         all_delta = 0
         for name, (dtype, _) in structured_dtype.fields.items():
-            views, dtype, shape, offset, delta = _nativize_dtype(
-                sample_dtype, dtype, offset)
+            views, dtype, shape, offset, delta = _nativize_dtype(sample_dtype, dtype, offset)
 
             if views is not None:
                 subviews[name] = views
@@ -122,9 +119,7 @@ def compilable_cast(u8, dtype):
     return u8.view(dtype)  # breaking cast
 
 
-def _nativize_tensor(
-    observation: torch.Tensor, native_dtype: NativeDType
-) -> torch.Tensor | dict[str, torch.Tensor]:
+def _nativize_tensor(observation: torch.Tensor, native_dtype: NativeDType) -> torch.Tensor | dict[str, torch.Tensor]:
     if isinstance(native_dtype, tuple):
         dtype, shape, offset, delta = native_dtype
         torch._check_is_size(offset)
@@ -202,27 +197,26 @@ class LSTM(nn.LSTM):
         super().__init__(input_size, hidden_size, num_layers)
         layer_init(self)
 
+
 def cycle_selector(sample_idx, num_policies):
     return sample_idx % num_policies
 
+
 class PolicyPool(torch.nn.Module):
-    def __init__(self, vecenv, policies, learner_mask, device,
-            policy_selector=cycle_selector):
-        '''Experimental utility for running multiple different policies'''
+    def __init__(self, vecenv, policies, learner_mask, device, policy_selector=cycle_selector):
+        """Experimental utility for running multiple different policies"""
         super().__init__()
         assert len(learner_mask) == len(policies)
-        self.policy_map = torch.tensor([policy_selector(i, len(policies))
-            for i in range(vecenv.num_agents)])
+        self.policy_map = torch.tensor([policy_selector(i, len(policies)) for i in range(vecenv.num_agents)])
         self.learner_mask = learner_mask
         self.policies = torch.nn.ModuleList(policies)
         self.vecenv = vecenv
 
         # Assumes that all policies have the same LSTM or no LSTM
-        self.lstm = policies[0].lstm if hasattr(policies[0], 'lstm') else None
+        self.lstm = policies[0].lstm if hasattr(policies[0], "lstm") else None
 
         # Allocate buffers
-        self.actions = torch.zeros(vecenv.num_agents,
-            *vecenv.single_action_space.shape, dtype=int).to(device)
+        self.actions = torch.zeros(vecenv.num_agents, *vecenv.single_action_space.shape, dtype=int).to(device)
         self.logprobs = torch.zeros(vecenv.num_agents).to(device)
         self.entropy = torch.zeros(vecenv.num_agents).to(device)
         self.values = torch.zeros(vecenv.num_agents).to(device)

@@ -1,12 +1,11 @@
-from setuptools import find_packages, find_namespace_packages, setup, Extension
-from Cython.Build import cythonize
-import numpy
 import os
-import urllib.request
-import zipfile
-import tarfile
 import platform
-import shutil
+import tarfile
+import urllib.request
+
+import numpy
+from Cython.Build import cythonize
+from setuptools import Extension, find_namespace_packages, find_packages, setup
 
 #  python3 setup.py built_ext --inplace
 

@@ -1,23 +1,36 @@
-from pdb import set_trace as T
-import numpy as np
-from types import SimpleNamespace
-import gymnasium
-import pettingzoo
 import time
 
+import gymnasium
+import numpy as np
+import pufferlib
 from pufferlib.ocean.nmmo3.cy_nmmo3 import Environment, entity_dtype, reward_dtype
 
-import pufferlib
 
 class NMMO3(pufferlib.PufferEnv):
-    def __init__(self, width=4*[512], height=4*[512], num_envs=4,
-            num_players=1024, num_enemies=2048, num_resources=2048,
-            num_weapons=1024, num_gems=512, tiers=5, levels=40,
-            teleportitis_prob=0.001, enemy_respawn_ticks=2,
-            item_respawn_ticks=100, x_window=7, y_window=5,
-            reward_combat_level=1.0, reward_prof_level=1.0,
-            reward_item_level=0.5, reward_market=0.01,
-            reward_death=-1.0, buf=None):
+    def __init__(
+        self,
+        width=4 * [512],
+        height=4 * [512],
+        num_envs=4,
+        num_players=1024,
+        num_enemies=2048,
+        num_resources=2048,
+        num_weapons=1024,
+        num_gems=512,
+        tiers=5,
+        levels=40,
+        teleportitis_prob=0.001,
+        enemy_respawn_ticks=2,
+        item_respawn_ticks=100,
+        x_window=7,
+        y_window=5,
+        reward_combat_level=1.0,
+        reward_prof_level=1.0,
+        reward_item_level=0.5,
+        reward_market=0.01,
+        reward_death=-1.0,
+        buf=None,
+    ):
         if not isinstance(width, list):
             width = num_envs * [width]
         if not isinstance(height, list):
@@ -113,13 +126,13 @@ class NMMO3(pufferlib.PufferEnv):
             total_players += num_players[idx]
             total_enemies += num_enemies[idx]
 
-        self.players_flat = np.zeros((total_players, 51+501+3), dtype=np.intc)
-        self.enemies_flat = np.zeros((total_enemies, 51+501+3), dtype=np.intc)
+        self.players_flat = np.zeros((total_players, 51 + 501 + 3), dtype=np.intc)
+        self.enemies_flat = np.zeros((total_enemies, 51 + 501 + 3), dtype=np.intc)
         self.rewards_flat = np.zeros((total_players, 10), dtype=np.float32)
-        #map_obs = np.zeros((total_players, 11*15 + 47 + 10), dtype=np.intc)
-        #counts = np.zeros((num_envs, height, width), dtype=np.uint8)
-        #terrain = np.zeros((num_envs, height, width), dtype=np.uint8)
-        #rendered = np.zeros((num_envs, height, width, 3), dtype=np.uint8)
+        # map_obs = np.zeros((total_players, 11*15 + 47 + 10), dtype=np.intc)
+        # counts = np.zeros((num_envs, height, width), dtype=np.uint8)
+        # terrain = np.zeros((num_envs, height, width), dtype=np.uint8)
+        # rendered = np.zeros((num_envs, height, width, 3), dtype=np.uint8)
         actions = np.zeros((total_players), dtype=np.intc)
         self.actions = actions
 
@@ -127,30 +140,48 @@ class NMMO3(pufferlib.PufferEnv):
         self.num_players = total_players
         self.num_enemies = total_enemies
 
-        self.players = np.frombuffer(self.players_flat,
-            dtype=entity_dtype()).view(np.recarray)
-        self.enemies = np.frombuffer(self.enemies_flat,
-            dtype=entity_dtype()).view(np.recarray)
-        self.struct_rewards = np.frombuffer(self.rewards_flat,
-            dtype=reward_dtype()).view(np.recarray)
+        self.players = np.frombuffer(self.players_flat, dtype=entity_dtype()).view(np.recarray)
+        self.enemies = np.frombuffer(self.enemies_flat, dtype=entity_dtype()).view(np.recarray)
+        self.struct_rewards = np.frombuffer(self.rewards_flat, dtype=reward_dtype()).view(np.recarray)
 
         self.comb_goal_mask = np.array([1, 0, 1, 0, 1, 1, 0, 1, 1, 1])
         self.prof_goal_mask = np.array([0, 0, 0, 1, 0, 0, 1, 1, 1, 1])
         self.tick = 0
 
-        self.single_observation_space = gymnasium.spaces.Box(low=-1,
-            high=2**32-1, shape=(11*15*10+47+10,), dtype=np.uint8)
+        self.single_observation_space = gymnasium.spaces.Box(
+            low=-1, high=2**32 - 1, shape=(11 * 15 * 10 + 47 + 10,), dtype=np.uint8
+        )
         self.single_action_space = gymnasium.spaces.Discrete(26)
-        self.render_mode = 'human'
+        self.render_mode = "human"
 
         super().__init__(buf)
-        self.c_env = Environment(self.observations, self.players_flat,
-            self.enemies_flat, self.rewards_flat, self.actions,
-            width, height, num_envs, num_players, num_enemies,
-            num_resources, num_weapons, num_gems, tiers, levels,
-            teleportitis_prob, enemy_respawn_ticks, item_respawn_ticks,
-            reward_combat_level, reward_prof_level, reward_item_level,
-            reward_market, reward_death, x_window, y_window)
+        self.c_env = Environment(
+            self.observations,
+            self.players_flat,
+            self.enemies_flat,
+            self.rewards_flat,
+            self.actions,
+            width,
+            height,
+            num_envs,
+            num_players,
+            num_enemies,
+            num_resources,
+            num_weapons,
+            num_gems,
+            tiers,
+            levels,
+            teleportitis_prob,
+            enemy_respawn_ticks,
+            item_respawn_ticks,
+            reward_combat_level,
+            reward_prof_level,
+            reward_item_level,
+            reward_market,
+            reward_death,
+            x_window,
+            y_window,
+        )
 
     def reset(self, seed=None):
         self.struct_rewards.fill(0)
@@ -160,8 +191,8 @@ class NMMO3(pufferlib.PufferEnv):
         return self.observations, []
 
     def step(self, actions):
-        if not hasattr(self, 'is_reset'):
-            raise Exception('Must call reset before step')
+        if not hasattr(self, "is_reset"):
+            raise Exception("Must call reset before step")
         self.rewards.fill(0)
         rewards = self.struct_rewards
         rewards.fill(0)
@@ -172,20 +203,20 @@ class NMMO3(pufferlib.PufferEnv):
         infos = []
         if self.tick % 128 == 0:
             log = self.c_env.log()
-            if log['episode_length'] > 0:
+            if log["episode_length"] > 0:
                 infos.append(log)
 
-            '''
+            """
             print(
                 f'Comb lvl: {np.mean(self.players.comb_lvl)} (max {np.max(self.players.comb_lvl)})',
                 f'Prof lvl: {np.mean(self.players.prof_lvl)} (max {np.max(self.players.prof_lvl)})',
                 f'Time alive: {np.mean(self.players.time_alive)} (max {np.max(self.players.time_alive)})',
             )
-            '''
+            """
 
         if False and self.tick % 128 == 0:
             # TODO: Log images to Wandb in latest version
-            infos['nmmo3_map'] = self.render()
+            infos["nmmo3_map"] = self.render()
 
         self.tick += 1
 
@@ -195,10 +226,10 @@ class NMMO3(pufferlib.PufferEnv):
 
     def render(self):
         self.c_env.render()
-        #all_maps = [e.rendered.astype(np.float32) for e in self.c_env.envs]
-        #all_counts = [e.counts.astype(np.float32) for e in self.c_env.envs]
+        # all_maps = [e.rendered.astype(np.float32) for e in self.c_env.envs]
+        # all_counts = [e.counts.astype(np.float32) for e in self.c_env.envs]
 
-        '''
+        """
         agg_maps = np.zeros((2048, 2048, 3), dtype=np.float32)
         agg_counts = np.zeros((2048, 2048), dtype=np.float32)
 
@@ -239,27 +270,26 @@ class NMMO3(pufferlib.PufferEnv):
         lerped = lerped[::2, ::2]
 
         return lerped.astype(np.uint8)
-        '''
+        """
 
     def close(self):
         self.c_envs.close()
+
 
 class Overlays:
     def __init__(self, width, height):
         self.counts = np.zeros((width, height), dtype=int)
         self.value_function = np.zeros((width, height), dtype=np.float32)
 
+
 def test_env_performance(env, timeout=10):
     num_agents = env.num_players
 
-    actions = {t:
-        {agent: np.random.randint(0, 6) for agent in range(1, num_agents+1)}
-        for t in range(100)
-    }
+    actions = {t: {agent: np.random.randint(0, 6) for agent in range(1, num_agents + 1)} for t in range(100)}
     actions = {t: np.random.randint(0, 6, num_agents) for t in range(100)}
     idx = 0
 
-    import time
+
     start = time.time()
     num_steps = 0
     while time.time() - start < timeout:
@@ -269,5 +299,3 @@ def test_env_performance(env, timeout=10):
     end = time.time()
     fps = num_agents * num_steps / (end - start)
     print(f"Test Environment Performance FPS: {fps:.2f}")
-
-

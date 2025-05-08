@@ -1,4 +1,4 @@
-from pdb import set_trace as T
+
 
 class GymToGymnasium:
     def __init__(self, env):
@@ -21,6 +21,7 @@ class GymToGymnasium:
 
     def close(self):
         self.env.close()
+
 
 class PettingZooTruncatedWrapper:
     def __init__(self, env):

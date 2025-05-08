@@ -1,12 +1,13 @@
-from pdb import set_trace as T
-import numpy as np
 import gymnasium
+import numpy as np
 
 import pufferlib.utils
 
+
 class ResizeObservation(gymnasium.Wrapper):
-    '''Fixed downscaling wrapper. Do NOT use gym.wrappers.ResizeObservation
-    It uses a laughably slow OpenCV resize. -50% on Atari just from that.'''
+    """Fixed downscaling wrapper. Do NOT use gym.wrappers.ResizeObservation
+    It uses a laughably slow OpenCV resize. -50% on Atari just from that."""
+
     def __init__(self, env, downscale=2):
         super().__init__(env)
         self.downscale = downscale
@@ -14,19 +15,20 @@ class ResizeObservation(gymnasium.Wrapper):
         assert y_size % downscale == 0 and x_size % downscale == 0
         y_size = env.observation_space.shape[0] // downscale
         x_size = env.observation_space.shape[1] // downscale
-        self.observation_space = gymnasium.spaces.Box(
-            low=0, high=255, shape=(y_size, x_size), dtype=np.uint8)
+        self.observation_space = gymnasium.spaces.Box(low=0, high=255, shape=(y_size, x_size), dtype=np.uint8)
 
     def reset(self, seed=None, options=None):
         obs, info = self.env.reset(seed=seed, options=options)
-        return obs[::self.downscale, ::self.downscale], info
+        return obs[:: self.downscale, :: self.downscale], info
 
     def step(self, action):
         obs, reward, terminal, truncated, info = self.env.step(action)
-        return obs[::self.downscale, ::self.downscale], reward, terminal, truncated, info
+        return obs[:: self.downscale, :: self.downscale], reward, terminal, truncated, info
+
 
 class ClipAction(gymnasium.Wrapper):
-    '''Wrapper for Gymnasium environments that clips actions'''
+    """Wrapper for Gymnasium environments that clips actions"""
+
     def __init__(self, env):
         self.env = env
         assert isinstance(env.action_space, gymnasium.spaces.Box)
@@ -44,8 +46,9 @@ class ClipAction(gymnasium.Wrapper):
 
 
 class EpisodeStats(gymnasium.Wrapper):
-    '''Wrapper for Gymnasium environments that stores
-    episodic returns and lengths in infos'''
+    """Wrapper for Gymnasium environments that stores
+    episodic returns and lengths in infos"""
+
     def __init__(self, env):
         self.env = env
         self.observation_space = env.observation_space
@@ -55,7 +58,7 @@ class EpisodeStats(gymnasium.Wrapper):
     def reset(self, seed=None, options=None):
         self.info = dict(episode_return=[], episode_length=0)
         # TODO: options
-        return self.env.reset(seed=seed)#, options=options)
+        return self.env.reset(seed=seed)  # , options=options)
 
     def step(self, action):
         observation, reward, terminated, truncated, info = super().step(action)
@@ -66,8 +69,8 @@ class EpisodeStats(gymnasium.Wrapper):
 
             self.info[k].append(v)
 
-        self.info['episode_return'].append(reward)
-        self.info['episode_length'] += 1
+        self.info["episode_return"].append(reward)
+        self.info["episode_length"] += 1
 
         info = {}
         if terminated or truncated:
@@ -83,7 +86,7 @@ class EpisodeStats(gymnasium.Wrapper):
                     continue
 
                 try:
-                    x = int(v) # probably a value
+                    x = int(v)  # probably a value
                     info[k] = v
                     continue
                 except TypeError:
@@ -91,15 +94,17 @@ class EpisodeStats(gymnasium.Wrapper):
 
         return observation, reward, terminated, truncated, info
 
+
 class PettingZooWrapper:
-    '''PettingZoo does not provide a ParallelEnv wrapper. This code is adapted from
-    their AEC wrapper, to prevent unneeded conversions to/from AEC'''
+    """PettingZoo does not provide a ParallelEnv wrapper. This code is adapted from
+    their AEC wrapper, to prevent unneeded conversions to/from AEC"""
+
     def __init__(self, env):
         self.env = env
 
     def __getattr__(self, name):
-        '''Returns an attribute with ``name``, unless ``name`` starts with an underscore.'''
-        if name.startswith('_') and name != '_cumulative_rewards':
+        """Returns an attribute with ``name``, unless ``name`` starts with an underscore."""
+        if name.startswith("_") and name != "_cumulative_rewards":
             raise AttributeError(f'accessing private attribute "{name}" is prohibited')
         return getattr(self.env, name)
 
@@ -135,11 +140,13 @@ class PettingZooWrapper:
         return self.env.action_space(agent)
 
     def __str__(self) -> str:
-        '''Returns a name which looks like: "max_observation<space_invaders_v1>".'''
-        return f'{type(self).__name__}<{str(self.env)}>'
+        """Returns a name which looks like: "max_observation<space_invaders_v1>"."""
+        return f"{type(self).__name__}<{str(self.env)}>"
+
 
 class MeanOverAgents(PettingZooWrapper):
-    '''Averages over agent infos'''
+    """Averages over agent infos"""
+
     def _mean(self, infos):
         list_infos = {}
         for agent, info in infos.items():
@@ -168,15 +175,14 @@ class MeanOverAgents(PettingZooWrapper):
         infos = self._mean(infos)
         return observations, rewards, terminations, truncations, infos
 
+
 class MultiagentEpisodeStats(PettingZooWrapper):
-    '''Wrapper for PettingZoo environments that stores
-    episodic returns and lengths in infos'''
+    """Wrapper for PettingZoo environments that stores
+    episodic returns and lengths in infos"""
+
     def reset(self, seed=None, options=None):
         observations, infos = super().reset(seed=seed, options=options)
-        self.infos = {
-            agent: dict(episode_return=[], episode_length=0)
-            for agent in self.possible_agents
-        }
+        self.infos = {agent: dict(episode_return=[], episode_length=0) for agent in self.possible_agents}
         return observations, infos
 
     def step(self, actions):
@@ -192,8 +198,8 @@ class MultiagentEpisodeStats(PettingZooWrapper):
                 agent_info[k].append(v)
 
             # Saved to self. TODO: Clean up
-            agent_info['episode_return'].append(rewards[agent])
-            agent_info['episode_length'] += 1
+            agent_info["episode_return"].append(rewards[agent])
+            agent_info["episode_length"] += 1
 
             agent_info = {}
             all_infos[agent] = agent_info
@@ -210,7 +216,7 @@ class MultiagentEpisodeStats(PettingZooWrapper):
                         continue
 
                     try:
-                        x = int(v) # probably a value
+                        x = int(v)  # probably a value
                         agent_info[k] = v
                         continue
                     except TypeError:

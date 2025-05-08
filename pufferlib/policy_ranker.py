@@ -1,18 +1,18 @@
-from pdb import set_trace as T
-import numpy as np
-
 import sqlite3
+
+import numpy as np
 
 ANCHOR_ELO = 1000.0
 
 
 def win_prob(elo1, elo2):
-    '''Calculate win probability such that a difference of
-    50/100/150 elo corresponds to win probabilitit 68/95/99.7%'''
+    """Calculate win probability such that a difference of
+    50/100/150 elo corresponds to win probabilitit 68/95/99.7%"""
     return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
 
+
 def update_elos(elos: np.ndarray, scores: np.ndarray, k: float = 4.0):
-    '''Update elos based on the result of a game
+    """Update elos based on the result of a game
 
     The parameter k controls the magnitude of the update.
     A higher k means that the elo will change more after a game.
@@ -23,13 +23,13 @@ def update_elos(elos: np.ndarray, scores: np.ndarray, k: float = 4.0):
     The default is tuned for normally distributed player skill
     You should lower it if you have very similar players.
     Raise it if you are evaluating a diverse skill pool.
-    '''
+    """
     num_players = len(elos)
     assert num_players == len(scores)
 
     elo_update = [[] for _ in range(num_players)]
     for i in range(num_players):
-        for j in range(i+1, num_players):
+        for j in range(i + 1, num_players):
             delta = scores[i] - scores[j]
 
             # Convert to elo scoring format
@@ -49,7 +49,8 @@ def update_elos(elos: np.ndarray, scores: np.ndarray, k: float = 4.0):
             elo_update[j].append(k * (score_j - expected_j))
 
     elo_update = [np.mean(e) for e in elo_update]
-    return [elo + update for elo, update in zip(elos, elo_update)]
+    return [elo + update for elo, update in zip(elos, elo_update, strict=False)]
+
 
 class Ranker:
     def __init__(self, db_path):
@@ -64,13 +65,10 @@ class Ranker:
 
     def __repr__(self):
         if len(self.ratings) == 0:
-            return ''
+            return ""
 
         sorted_dict = sorted(self.ratings.items(), key=lambda x: x[1], reverse=True)
-        return '\n'.join([
-            f' - Policy: {name}, Elo: {elo:.3f}'
-            for name, elo in sorted_dict
-        ])
+        return "\n".join([f" - Policy: {name}, Elo: {elo:.3f}" for name, elo in sorted_dict])
 
     @property
     def ratings(self):
@@ -96,9 +94,12 @@ class Ranker:
                 flat_elos.append(ANCHOR_ELO)
 
         flat_elos = update_elos(flat_elos, flat_scores)
-        elos = zip(scores.keys(), flat_elos)
+        elos = zip(scores.keys(), flat_elos, strict=False)
         with self.conn:
-            self.conn.executemany("""
+            self.conn.executemany(
+                """
                 INSERT OR REPLACE INTO ratings (policy, elo)
                 VALUES (?, ?);
-            """, elos)
+            """,
+                elos,
+            )

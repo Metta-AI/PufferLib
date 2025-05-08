@@ -1,16 +1,14 @@
-from pdb import set_trace as T
+
+# Deprecation warnings from gymnasium
+import warnings
 
 import numpy as np
-
 import pufferlib
 import pufferlib.emulation
 import pufferlib.utils
 import pufferlib.vector
 from pufferlib.environments import test
 
-# Deprecation warnings from gymnasium
-import gymnasium
-import warnings
 warnings.filterwarnings("ignore")
 
 
@@ -31,8 +29,7 @@ def test_gymnasium_emulation(env_cls, steps=100):
 
         # Reconstruct original obs format from puffer env and compare to raw
         if puf_env.is_obs_emulated:
-            puf_ob = pufferlib.emulation.nativize(
-                puf_ob, puf_env.env.observation_space, puf_env.obs_dtype)
+            puf_ob = pufferlib.emulation.nativize(puf_ob, puf_env.env.observation_space, puf_env.obs_dtype)
 
         pufferlib.utils.compare_space_samples(raw_ob, puf_ob)
 
@@ -41,11 +38,11 @@ def test_gymnasium_emulation(env_cls, steps=100):
 
         # Convert raw actions to puffer format
         if puf_env.is_atn_emulated:
-            action = pufferlib.emulation.emulate_copy(
-                action, puf_env.action_space.dtype, puf_env.atn_dtype)
+            action = pufferlib.emulation.emulate_copy(action, puf_env.action_space.dtype, puf_env.atn_dtype)
 
         puf_ob, puf_reward, puf_done, puf_truncated, _ = puf_env.step(action)
         assert puf_reward == raw_reward
+
 
 def test_pettingzoo_emulation(env_cls, steps=100):
     raw_env = env_cls()
@@ -71,13 +68,11 @@ def test_pettingzoo_emulation(env_cls, steps=100):
 
             # Reconstruct original obs format from puffer env and compare to raw
             if puf_env.is_obs_emulated:
-                puf_ob = pufferlib.emulation.nativize(
-                    puf_ob, puf_env.env.single_observation_space, puf_env.obs_dtype)
-            
+                puf_ob = pufferlib.emulation.nativize(puf_ob, puf_env.env.single_observation_space, puf_env.obs_dtype)
+
             assert pufferlib.utils.compare_space_samples(raw_ob, puf_ob)
 
-        raw_actions = {a: raw_env.action_space(a).sample()
-            for a in raw_env.agents}
+        raw_actions = {a: raw_env.action_space(a).sample() for a in raw_env.agents}
         puf_actions = raw_actions
 
         raw_obs, raw_rewards, raw_dones, raw_truncateds, _ = raw_env.step(raw_actions)
@@ -91,7 +86,8 @@ def test_pettingzoo_emulation(env_cls, steps=100):
                     continue
 
                 puf_actions[agent] = pufferlib.emulation.emulate_copy(
-                    raw_actions[agent], puf_env.single_action_space.dtype, puf_env.atn_dtype)
+                    raw_actions[agent], puf_env.single_action_space.dtype, puf_env.atn_dtype
+                )
 
         puf_obs, puf_rewards, puf_dones, puf_truncateds, _ = puf_env.step(puf_actions)
 
@@ -101,10 +97,10 @@ def test_pettingzoo_emulation(env_cls, steps=100):
         for agent in raw_dones:
             assert puf_dones[agent] == raw_dones[agent]
 
+
 def test_puffer_vectorization(env_cls, puffer_cls, steps=100, num_envs=1, **kwargs):
     raw_envs = [puffer_cls(env_creator=env_cls) for _ in range(num_envs)]
-    vec_envs = pufferlib.vector.make(puffer_cls,
-        env_kwargs={'env_creator': env_cls}, num_envs=num_envs, **kwargs)
+    vec_envs = pufferlib.vector.make(puffer_cls, env_kwargs={"env_creator": env_cls}, num_envs=num_envs, **kwargs)
 
     num_agents = sum(env.num_agents for env in raw_envs)
     assert num_agents == vec_envs.num_agents
@@ -138,7 +134,7 @@ def test_puffer_vectorization(env_cls, puffer_cls, steps=100, num_envs=1, **kwar
                 raw_rewards.append(r_rew)
                 raw_terminals.append(r_term)
                 raw_truncations.append(r_trunc)
-                
+
         vec_obs, vec_rewards, vec_terminals, vec_truncations, _ = vec_envs.step(actions)
 
         rew = raw_rewards
@@ -159,22 +155,21 @@ def test_puffer_vectorization(env_cls, puffer_cls, steps=100, num_envs=1, **kwar
     for raw_env in raw_envs:
         raw_env.close()
 
+
 def test_emulation():
     for env_cls in test.MOCK_SINGLE_AGENT_ENVIRONMENTS:
         test_gymnasium_emulation(env_cls)
 
-    print('Gymnasium emulation tests passed')
+    print("Gymnasium emulation tests passed")
 
     for env_cls in test.MOCK_MULTI_AGENT_ENVIRONMENTS:
         test_pettingzoo_emulation(env_cls)
 
-    print('PettingZoo emulation tests passed')
+    print("PettingZoo emulation tests passed")
+
 
 def test_vectorization():
-    for vectorization in [
-            pufferlib.vector.Serial,
-            pufferlib.vector.Multiprocessing,
-            pufferlib.vector.Ray]:
+    for vectorization in [pufferlib.vector.Serial, pufferlib.vector.Multiprocessing, pufferlib.vector.Ray]:
         for env_cls in test.MOCK_SINGLE_AGENT_ENVIRONMENTS:
             test_puffer_vectorization(
                 env_cls,
@@ -185,7 +180,7 @@ def test_vectorization():
                 backend=vectorization,
             )
 
-        print(f'Gymnasium {vectorization.__name__} vectorization tests passed')
+        print(f"Gymnasium {vectorization.__name__} vectorization tests passed")
 
         for env_cls in test.MOCK_MULTI_AGENT_ENVIRONMENTS:
             test_puffer_vectorization(
@@ -197,9 +192,10 @@ def test_vectorization():
                 backend=vectorization,
             )
 
-        print(f'PettingZoo {vectorization.__name__} vectorization tests passed')
+        print(f"PettingZoo {vectorization.__name__} vectorization tests passed")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_emulation()
     test_vectorization()
-    exit(0) # For Ray
+    exit(0)  # For Ray

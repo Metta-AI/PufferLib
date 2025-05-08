@@ -1,23 +1,24 @@
-from pdb import set_trace as T
 
-import gymnasium
 import functools
 
+import gymnasium
 from pokegym import Environment
 
 import pufferlib.emulation
 import pufferlib.postprocess
 
 
-def env_creator(name='pokemon_red'):
+def env_creator(name="pokemon_red"):
     return functools.partial(make, name)
 
+
 def make(name, headless: bool = True, state_path=None, buf=None):
-    '''Pokemon Red'''
+    """Pokemon Red"""
     env = Environment(headless=headless, state_path=state_path)
     env = RenderWrapper(env)
     env = pufferlib.postprocess.EpisodeStats(env)
     return pufferlib.emulation.GymnasiumPufferEnv(env=env, buf=buf)
+
 
 class RenderWrapper(gymnasium.Wrapper):
     def __init__(self, env):
@@ -25,7 +26,7 @@ class RenderWrapper(gymnasium.Wrapper):
 
     @property
     def render_mode(self):
-        return 'rgb_array'
+        return "rgb_array"
 
     def render(self):
         return self.env.screen.screen_ndarray()

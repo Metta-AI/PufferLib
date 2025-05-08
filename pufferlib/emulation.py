@@ -1,16 +1,15 @@
-from pdb import set_trace as T
 
-import numpy as np
+import inspect
 import warnings
 
 import gymnasium
-import inspect
+import numpy as np
 
 import pufferlib
 import pufferlib.spaces
-from pufferlib import utils, exceptions
+from pufferlib import exceptions, utils
 from pufferlib.environment import set_buffers
-from pufferlib.spaces import Discrete, Tuple, Dict
+from pufferlib.spaces import Dict, Discrete, Tuple
 
 
 def emulate(struct, sample):
@@ -19,18 +18,19 @@ def emulate(struct, sample):
             emulate(struct[k], v)
     elif isinstance(sample, tuple):
         for i, v in enumerate(sample):
-            emulate(struct[f'f{i}'], v)
+            emulate(struct[f"f{i}"], v)
     else:
         struct[()] = sample
 
+
 def make_buffer(arr_dtype, struct_dtype, struct, n=None):
-    '''None instead of 1 makes it work for 1 agent PZ envs'''
-    '''
+    """None instead of 1 makes it work for 1 agent PZ envs"""
+    """
     if n is None:
         struct = np.zeros(1, dtype=struct_dtype)
     else:
         struct = np.zeros(n, dtype=struct_dtype)
-    '''
+    """
 
     arr = struct.view(arr_dtype)
 
@@ -41,34 +41,36 @@ def make_buffer(arr_dtype, struct_dtype, struct, n=None):
 
     return arr
 
+
 def _nativize(struct, space):
     if isinstance(space, Discrete):
         return struct.item()
     elif isinstance(space, Tuple):
-        return tuple(_nativize(struct[f'f{i}'], elem)
-            for i, elem in enumerate(space))
+        return tuple(_nativize(struct[f"f{i}"], elem) for i, elem in enumerate(space))
     elif isinstance(space, Dict):
-        return {k: _nativize(struct[k], value)
-            for k, value in space.items()}
+        return {k: _nativize(struct[k], value) for k, value in space.items()}
     else:
         return struct
+
 
 def nativize(arr, space, struct_dtype):
     struct = np.asarray(arr).view(struct_dtype)[0]
     return _nativize(struct, space)
 
-'''
+
+"""
 try:
     from pufferlib.extensions import emulate, nativize
 except ImportError:
     warnings.warn('PufferLib Cython extensions not installed. Using slow Python versions')
-'''
+"""
+
 
 def dtype_from_space(space):
     if isinstance(space, pufferlib.spaces.Tuple):
         dtype = []
         for i, elem in enumerate(space):
-            dtype.append((f'f{i}', dtype_from_space(elem)))
+            dtype.append((f"f{i}", dtype_from_space(elem)))
     elif isinstance(space, pufferlib.spaces.Dict):
         dtype = []
         for k, value in space.items():
@@ -81,6 +83,7 @@ def dtype_from_space(space):
         dtype = (space.dtype, space.shape)
 
     return np.dtype(dtype, align=True)
+
 
 def flatten_space(space):
     if isinstance(space, pufferlib.spaces.Tuple):
@@ -95,6 +98,7 @@ def flatten_space(space):
         return subspaces
     else:
         return [space]
+
 
 def emulate_observation_space(space):
     emulated_dtype = dtype_from_space(space)
@@ -113,6 +117,7 @@ def emulate_observation_space(space):
     numel = emulated_dtype.itemsize // dtype.itemsize
     emulated_space = gymnasium.spaces.Box(low=mmin, high=mmax, shape=(numel,), dtype=dtype)
     return emulated_space, emulated_dtype
+
 
 def emulate_action_space(space):
     if isinstance(space, pufferlib.spaces.Box):
@@ -136,10 +141,8 @@ class GymnasiumPufferEnv(gymnasium.Env):
         self.is_observation_checked = False
         self.is_action_checked = False
 
-        self.observation_space, self.obs_dtype = emulate_observation_space(
-            self.env.observation_space)
-        self.action_space, self.atn_dtype = emulate_action_space(
-            self.env.action_space)
+        self.observation_space, self.obs_dtype = emulate_observation_space(self.env.observation_space)
+        self.action_space, self.atn_dtype = emulate_action_space(self.env.action_space)
         self.single_observation_space = self.observation_space
         self.single_action_space = self.action_space
         self.num_agents = 1
@@ -147,18 +150,18 @@ class GymnasiumPufferEnv(gymnasium.Env):
         self.is_obs_emulated = self.single_observation_space is not self.env.observation_space
         self.is_atn_emulated = self.single_action_space is not self.env.action_space
         self.emulated = pufferlib.namespace(
-            observation_dtype = self.observation_space.dtype,
-            emulated_observation_dtype = self.obs_dtype,
+            observation_dtype=self.observation_space.dtype,
+            emulated_observation_dtype=self.obs_dtype,
         )
 
-        self.render_modes = 'human rgb_array'.split()
+        self.render_modes = "human rgb_array".split()
 
         set_buffers(self, buf)
         if isinstance(self.env.observation_space, pufferlib.spaces.Box):
             self.obs_struct = self.observations
         else:
             self.obs_struct = self.observations.view(self.obs_dtype)
- 
+
     @property
     def render_mode(self):
         return self.env.render_mode
@@ -172,8 +175,7 @@ class GymnasiumPufferEnv(gymnasium.Env):
 
         ob, info = _seed_and_reset(self.env, seed)
         if not self.is_observation_checked:
-            self.is_observation_checked = check_space(
-                ob, self.env.observation_space)
+            self.is_observation_checked = check_space(ob, self.env.observation_space)
 
         if self.is_obs_emulated:
             emulate(self.obs_struct, ob)
@@ -184,15 +186,15 @@ class GymnasiumPufferEnv(gymnasium.Env):
         self.terminals[0] = False
         self.truncations[0] = False
         self.masks[0] = True
- 
+
         return self.observations, info
- 
+
     def step(self, action):
-        '''Execute an action and return (observation, reward, done, info)'''
+        """Execute an action and return (observation, reward, done, info)"""
         if not self.initialized:
-            raise exceptions.APIUsageError('step() called before reset()')
+            raise exceptions.APIUsageError("step() called before reset()")
         if self.done:
-            raise exceptions.APIUsageError('step() called after environment is done')
+            raise exceptions.APIUsageError("step() called after environment is done")
 
         # Unpack actions from multidiscrete into the original action space
         if self.is_atn_emulated:
@@ -204,8 +206,7 @@ class GymnasiumPufferEnv(gymnasium.Env):
                 action = action[0]
 
         if not self.is_action_checked:
-            self.is_action_checked = check_space(
-                action, self.env.action_space)
+            self.is_action_checked = check_space(action, self.env.action_space)
 
         ob, reward, done, truncated, info = self.env.step(action)
 
@@ -218,7 +219,7 @@ class GymnasiumPufferEnv(gymnasium.Env):
         self.terminals[0] = done
         self.truncations[0] = truncated
         self.masks[0] = True
-                  
+
         self.done = done or truncated
         return self.observations, reward, done, truncated, info
 
@@ -227,6 +228,7 @@ class GymnasiumPufferEnv(gymnasium.Env):
 
     def close(self):
         return self.env.close()
+
 
 class PettingZooPufferEnv:
     def __init__(self, env=None, env_creator=None, env_args=[], buf=None, env_kwargs={}, to_puffer=False):
@@ -242,15 +244,13 @@ class PettingZooPufferEnv:
         single_agent = self.possible_agents[0]
         self.env_single_observation_space = self.env.observation_space(single_agent)
         self.env_single_action_space = self.env.action_space(single_agent)
-        self.single_observation_space, self.obs_dtype = (
-            emulate_observation_space(self.env_single_observation_space))
-        self.single_action_space, self.atn_dtype = (
-            emulate_action_space(self.env_single_action_space))
+        self.single_observation_space, self.obs_dtype = emulate_observation_space(self.env_single_observation_space)
+        self.single_action_space, self.atn_dtype = emulate_action_space(self.env_single_action_space)
         self.is_obs_emulated = self.single_observation_space is not self.env_single_observation_space
         self.is_atn_emulated = self.single_action_space is not self.env_single_action_space
         self.emulated = pufferlib.namespace(
-            observation_dtype = self.single_observation_space.dtype,
-            emulated_observation_dtype = self.obs_dtype,
+            observation_dtype=self.single_observation_space.dtype,
+            emulated_observation_dtype=self.obs_dtype,
         )
 
         self.num_agents = len(self.possible_agents)
@@ -278,14 +278,14 @@ class PettingZooPufferEnv:
         return len(self.agents) == 0 or self.all_done
 
     def observation_space(self, agent):
-        '''Returns the observation space for a single agent'''
+        """Returns the observation space for a single agent"""
         if agent not in self.possible_agents:
             raise pufferlib.exceptions.InvalidAgentError(agent, self.possible_agents)
 
         return self.single_observation_space
 
     def action_space(self, agent):
-        '''Returns the action space for a single agent'''
+        """Returns the action space for a single agent"""
         if agent not in self.possible_agents:
             raise pufferlib.exceptions.InvalidAgentError(agent, self.possible_agents)
 
@@ -303,8 +303,7 @@ class PettingZooPufferEnv:
 
         if not self.is_observation_checked:
             for k, ob in obs.items():
-                self.is_observation_checked = check_space(
-                    ob, self.env.observation_space(k))
+                self.is_observation_checked = check_space(ob, self.env.observation_space(k))
 
         # Call user featurizer and flatten the observations
         self.observations[:] = 0
@@ -326,16 +325,17 @@ class PettingZooPufferEnv:
         return self.dict_obs, info
 
     def step(self, actions):
-        '''Step the environment and return (observations, rewards, dones, infos)'''
+        """Step the environment and return (observations, rewards, dones, infos)"""
         if not self.initialized:
-            raise exceptions.APIUsageError('step() called before reset()')
+            raise exceptions.APIUsageError("step() called before reset()")
         if self.done:
-            raise exceptions.APIUsageError('step() called after environment is done')
+            raise exceptions.APIUsageError("step() called after environment is done")
 
         if isinstance(actions, np.ndarray):
             if not self.is_action_checked and len(actions) != self.num_agents:
                 raise exceptions.APIUsageError(
-                    f'Actions specified as len {len(actions)} but environment has {self.num_agents} agents')
+                    f"Actions specified as len {len(actions)} but environment has {self.num_agents} agents"
+                )
 
             actions = {agent: actions[i] for i, agent in enumerate(self.possible_agents)}
 
@@ -345,10 +345,7 @@ class PettingZooPufferEnv:
                 if agent not in self.possible_agents:
                     raise exceptions.InvalidAgentError(agent, self.possible_agents)
 
-            self.is_action_checked = check_space(
-                next(iter(actions.values())),
-                self.single_action_space
-            )
+            self.is_action_checked = check_space(next(iter(actions.values())), self.single_action_space)
 
         # Unpack actions from multidiscrete into the original action space
         unpacked_actions = {}
@@ -381,7 +378,7 @@ class PettingZooPufferEnv:
                 self.masks[i] = False
                 continue
 
-            ob = obs[agent] 
+            ob = obs[agent]
             self.mask[agent] = True
             if self.is_obs_emulated:
                 emulate(self.obs_struct[i], ob)
@@ -392,10 +389,12 @@ class PettingZooPufferEnv:
             self.terminals[i] = dones[agent]
             self.truncations[i] = truncateds[agent]
             self.masks[i] = True
-     
+
         self.all_done = all(dones.values()) or all(truncateds.values())
         rewards = pad_agent_data(rewards, self.possible_agents, 0)
-        dones = pad_agent_data(dones, self.possible_agents, True) # You changed this from false to match api test... is this correct?
+        dones = pad_agent_data(
+            dones, self.possible_agents, True
+        )  # You changed this from false to match api test... is this correct?
         truncateds = pad_agent_data(truncateds, self.possible_agents, False)
         return self.dict_obs, rewards, dones, truncateds, infos
 
@@ -405,23 +404,24 @@ class PettingZooPufferEnv:
     def close(self):
         return self.env.close()
 
+
 def pad_agent_data(data, agents, pad_value):
-    return {agent: data[agent] if agent in data else pad_value
-        for agent in agents}
- 
+    return {agent: data[agent] if agent in data else pad_value for agent in agents}
+
+
 def make_object(object_instance=None, object_creator=None, creator_args=[], creator_kwargs={}):
     if (object_instance is None) == (object_creator is None):
-        raise ValueError('Exactly one of object_instance or object_creator must be provided')
+        raise ValueError("Exactly one of object_instance or object_creator must be provided")
 
     if object_instance is not None:
         if callable(object_instance) or inspect.isclass(object_instance):
-            raise TypeError('object_instance must be an instance, not a function or class')
+            raise TypeError("object_instance must be an instance, not a function or class")
         return object_instance
 
     if object_creator is not None:
         if not callable(object_creator):
-            raise TypeError('object_creator must be a callable')
-        
+            raise TypeError("object_creator must be a callable")
+
         if creator_args is None:
             creator_args = []
 
@@ -430,18 +430,18 @@ def make_object(object_instance=None, object_creator=None, creator_args=[], crea
 
         return object_creator(*creator_args, **creator_kwargs)
 
+
 def check_space(data, space):
     try:
         contains = space.contains(data)
     except:
-        raise exceptions.APIUsageError(
-            f'Error checking space {space} with sample :\n{data}')
+        raise exceptions.APIUsageError(f"Error checking space {space} with sample :\n{data}")
 
     if not contains:
-        raise exceptions.APIUsageError(
-            f'Data:\n{data}\n not in space:\n{space}')
-    
+        raise exceptions.APIUsageError(f"Data:\n{data}\n not in space:\n{space}")
+
     return True
+
 
 def _seed_and_reset(env, seed):
     if seed is None:
@@ -457,6 +457,6 @@ def _seed_and_reset(env, seed):
             obs, info = env.reset()
         except:
             obs, info = env.reset()
-            warnings.warn('WARNING: Environment does not support seeding.', DeprecationWarning)
+            warnings.warn("WARNING: Environment does not support seeding.", DeprecationWarning)
 
     return obs, info

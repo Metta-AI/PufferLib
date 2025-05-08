@@ -1,30 +1,25 @@
-from pdb import set_trace as T
-import numpy as np
+import functools
 
 import gym
-import gymnasium
+import numpy as np
 import shimmy
-import functools
 
 import pufferlib
 import pufferlib.emulation
 import pufferlib.environments
 import pufferlib.postprocess
 
-from stable_baselines3.common.atari_wrappers import (
-    MaxAndSkipEnv,
-)
 
-def env_creator(name='bigfish'):
+def env_creator(name="bigfish"):
     return functools.partial(make, name)
 
-def make(name, num_envs=1, num_levels=0, start_level=0,
-        distribution_mode='easy', render_mode=None, buf=None):
-    '''Atari creation function with default CleanRL preprocessing based on Stable Baselines3 wrappers'''
+
+def make(name, num_envs=1, num_levels=0, start_level=0, distribution_mode="easy", render_mode=None, buf=None):
+    """Atari creation function with default CleanRL preprocessing based on Stable Baselines3 wrappers"""
     assert int(num_envs) == float(num_envs), "num_envs must be an integer"
     num_envs = int(num_envs)
 
-    procgen = pufferlib.environments.try_import('procgen') 
+    procgen = pufferlib.environments.try_import("procgen")
     envs = procgen.ProcgenEnv(
         env_name=name,
         num_envs=num_envs,
@@ -43,28 +38,29 @@ def make(name, num_envs=1, num_levels=0, start_level=0,
     assert isinstance(envs.single_action_space, gym.spaces.Discrete), "only discrete action space is supported"
     envs = ProcgenWrapper(envs)
     envs = shimmy.GymV21CompatibilityV0(env=envs, render_mode=render_mode)
-    #envs = gymnasium.wrappers.GrayScaleObservation(envs)
-    #envs = gymnasium.wrappers.FrameStack(envs, 4)#, framestack)
-    #envs = MaxAndSkipEnv(envs, skip=2)
+    # envs = gymnasium.wrappers.GrayScaleObservation(envs)
+    # envs = gymnasium.wrappers.FrameStack(envs, 4)#, framestack)
+    # envs = MaxAndSkipEnv(envs, skip=2)
     envs = pufferlib.postprocess.EpisodeStats(envs)
     return pufferlib.emulation.GymnasiumPufferEnv(env=envs, buf=buf)
+
 
 class ProcgenWrapper:
     def __init__(self, env):
         self.env = env
-        self.observation_space = self.env.observation_space['rgb']
+        self.observation_space = self.env.observation_space["rgb"]
         self.action_space = self.env.action_space
 
     @property
     def render_mode(self):
-        return 'rgb_array'
+        return "rgb_array"
 
     def reset(self, seed=None):
         obs = self.env.reset()[0]
         return obs
 
     def render(self, mode=None):
-        return self.env.env.env.env.env.env.get_info()[0]['rgb']
+        return self.env.env.env.env.env.env.get_info()[0]["rgb"]
 
     def close(self):
         return self.env.close()

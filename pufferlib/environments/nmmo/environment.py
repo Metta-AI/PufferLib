@@ -1,34 +1,37 @@
-from pdb import set_trace as T
-import numpy as np
 import functools
+
+import numpy as np
 
 import pufferlib
 import pufferlib.emulation
 import pufferlib.environments
-import pufferlib.wrappers
 import pufferlib.postprocess
+import pufferlib.wrappers
 
 
-def env_creator(name='nmmo'):
+def env_creator(name="nmmo"):
     return functools.partial(make, name)
 
+
 def make(name, *args, buf=None, **kwargs):
-    '''Neural MMO creation function'''
-    nmmo = pufferlib.environments.try_import('nmmo')
+    """Neural MMO creation function"""
+    nmmo = pufferlib.environments.try_import("nmmo")
     env = nmmo.Env(*args, **kwargs)
     env = NMMOWrapper(env)
     env = pufferlib.postprocess.MultiagentEpisodeStats(env)
     env = pufferlib.postprocess.MeanOverAgents(env)
     return pufferlib.emulation.PettingZooPufferEnv(env=env, buf=buf)
 
+
 class NMMOWrapper(pufferlib.postprocess.PettingZooWrapper):
-    '''Remove task spam'''
+    """Remove task spam"""
+
     @property
     def render_mode(self):
-        return 'rgb_array'
-    
+        return "rgb_array"
+
     def render(self):
-        '''Quick little renderer for NMMO'''
+        """Quick little renderer for NMMO"""
         tiles = self.env.tile_map[:, :, 2].astype(np.uint8)
         render = np.zeros((tiles.shape[0], tiles.shape[1], 3), dtype=np.uint8)
         BROWN = (136, 69, 19)
@@ -67,11 +70,9 @@ class NMMOWrapper(pufferlib.postprocess.PettingZooWrapper):
 
     def step(self, actions):
         obs, rewards, dones, truncateds, infos = self.env.step(actions)
-        infos = {k: list(v['task'].values())[0] for k, v in infos.items()}
+        infos = {k: list(v["task"].values())[0] for k, v in infos.items()}
         self.obs = obs
         return obs, rewards, dones, truncateds, infos
 
     def close(self):
         return self.env.close()
-
-    

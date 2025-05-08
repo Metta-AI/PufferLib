@@ -1,8 +1,6 @@
-from pdb import set_trace as T
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 import pufferlib.models
 import pufferlib.pytorch
@@ -12,6 +10,7 @@ from pufferlib.pytorch import layer_init
 class Recurrent(pufferlib.models.LSTMWrapper):
     def __init__(self, env, policy, input_size=256, hidden_size=256, num_layers=1):
         super().__init__(env, policy, input_size, hidden_size, num_layers)
+
 
 class Policy(nn.Module):
     def __init__(self, env):
@@ -34,7 +33,7 @@ class Policy(nn.Module):
             nn.Flatten(),
         )
 
-        self.proj = nn.Linear(864+960, 256)
+        self.proj = nn.Linear(864 + 960, 256)
         self.actor = layer_init(nn.Linear(256, 8), std=0.01)
         self.critic = layer_init(nn.Linear(256, 1), std=1)
 
@@ -44,13 +43,13 @@ class Policy(nn.Module):
         return actions, value
 
     def encode_observations(self, x):
-        x = x.type(torch.uint8) # Undo bad cleanrl cast
+        x = x.type(torch.uint8)  # Undo bad cleanrl cast
         x = pufferlib.pytorch.nativize_tensor(x, self.dtype)
 
-        blstats = torch.clip(x['blstats'] + 1, 0, 255).int()
+        blstats = torch.clip(x["blstats"] + 1, 0, 255).int()
         blstats = self.blstats_net(blstats)
 
-        chars = self.char_embed(x['chars'].int())
+        chars = self.char_embed(x["chars"].int())
         chars = torch.permute(chars, (0, 3, 1, 2))
         chars = self.chars_net(chars)
 

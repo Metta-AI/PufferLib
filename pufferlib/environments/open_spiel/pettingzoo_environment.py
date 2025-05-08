@@ -1,32 +1,33 @@
-from pdb import set_trace as T
 import numpy as np
 
-import pufferlib
-from pufferlib import namespace
-
 from pufferlib.environments.open_spiel.utils import (
-    solve_chance_nodes,
-    get_obs_and_infos,
-    observation_space,
     action_space,
-    init,
-    render,
     close,
+    get_obs_and_infos,
+    init,
+    observation_space,
+    render,
+    solve_chance_nodes,
 )
+
 
 def agents(state):
     return state.agents
 
+
 def possible_agents(state):
     return list(range(state.env.num_players()))
+
 
 def pz_observation_space(state, agent):
     return observation_space(state)
 
+
 def pz_action_space(state, agent):
     return action_space(state)
 
-def reset(state, seed = None, options = None):
+
+def reset(state, seed=None, options=None):
     state.state = state.env.new_initial_state()
     obs, infos = get_obs_and_infos(state)
     state.agents = state.possible_agents
@@ -37,6 +38,7 @@ def reset(state, seed = None, options = None):
         np.random.seed(seed)
 
     return obs, infos
+
 
 def step(state, actions):
     curr_player = state.state.current_player()
@@ -55,6 +57,7 @@ def step(state, actions):
         state.agents = []
 
     return obs, rewards, terminateds, truncateds, infos
+
 
 class OpenSpielPettingZooEnvironment:
     __init__ = init

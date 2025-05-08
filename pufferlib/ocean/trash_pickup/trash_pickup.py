@@ -1,13 +1,23 @@
 import numpy as np
-from gymnasium import spaces
-
 import pufferlib
+from gymnasium import spaces
 from pufferlib.ocean.trash_pickup.cy_trash_pickup import CyTrashPickup
 
 
 class TrashPickupEnv(pufferlib.PufferEnv):
-    def __init__(self, num_envs=1, render_mode=None, report_interval=1, buf=None, 
-                 grid_size=10, num_agents=3, num_trash=15, num_bins=2, max_steps=300, agent_sight_range=5):
+    def __init__(
+        self,
+        num_envs=1,
+        render_mode=None,
+        report_interval=1,
+        buf=None,
+        grid_size=10,
+        num_agents=3,
+        num_trash=15,
+        num_bins=2,
+        max_steps=300,
+        agent_sight_range=5,
+    ):
         # Env Setup
         self.render_mode = render_mode
         self.report_interval = report_interval
@@ -50,16 +60,29 @@ class TrashPickupEnv(pufferlib.PufferEnv):
         # num_obs_bin = num_bins * 2  # [x pos, y pos] for each bin
         # num_obs_agent = num_agents * 3  # [carrying trash, x pos, y pos] for each agent
         # self.num_obs = num_obs_trash + num_obs_bin + num_obs_agent;
-        
-        # 2D Local crop obs space
-        self.num_obs = ((((agent_sight_range * 2 + 1) * (agent_sight_range * 2 + 1)) * 5));  # one-hot encoding for all cell types in local crop around agent (minus the cell the agent is currently in)
 
-        self.single_observation_space = spaces.Box(low=0, high=1,
-            shape=(self.num_obs,), dtype=np.int8)
+        # 2D Local crop obs space
+        self.num_obs = (
+            ((agent_sight_range * 2 + 1) * (agent_sight_range * 2 + 1)) * 5
+        )  # one-hot encoding for all cell types in local crop around agent (minus the cell the agent is currently in)
+
+        self.single_observation_space = spaces.Box(low=0, high=1, shape=(self.num_obs,), dtype=np.int8)
         self.single_action_space = spaces.Discrete(4)
 
         super().__init__(buf=buf)
-        self.c_envs = CyTrashPickup(self.observations, self.actions, self.rewards, self.terminals, num_envs, num_agents, grid_size, num_trash, num_bins, max_steps, agent_sight_range)
+        self.c_envs = CyTrashPickup(
+            self.observations,
+            self.actions,
+            self.rewards,
+            self.terminals,
+            num_envs,
+            num_agents,
+            grid_size,
+            num_trash,
+            num_bins,
+            max_steps,
+            agent_sight_range,
+        )
 
     def reset(self, seed=None):
         self.c_envs.reset()
@@ -75,35 +98,38 @@ class TrashPickupEnv(pufferlib.PufferEnv):
         if self.tick % self.report_interval == 0:
             log = self.c_envs.log()
             # print(f"tha log: {log}")
-            if log['episode_length'] > 0:
+            if log["episode_length"] > 0:
                 info.append(log)
 
-        return (self.observations, self.rewards,
-            self.terminals, self.truncations, info)
+        return (self.observations, self.rewards, self.terminals, self.truncations, info)
 
     def render(self):
         self.c_envs.render()
-        
+
     def close(self):
-        self.c_envs.close() 
+        self.c_envs.close()
+
 
 def test_performance(timeout=10, atn_cache=1024):
-    env = TrashPickupEnv(num_envs=1024, grid_size=10, num_agents=4,
-        num_trash=20, num_bins=1, max_steps=150, agent_sight_range=5)
- 
+    env = TrashPickupEnv(
+        num_envs=1024, grid_size=10, num_agents=4, num_trash=20, num_bins=1, max_steps=150, agent_sight_range=5
+    )
+
     env.reset()
     tick = 0
 
     actions = np.random.randint(0, 4, (atn_cache, env.num_agents))
 
     import time
+
     start = time.time()
     while time.time() - start < timeout:
         atn = actions[tick % atn_cache]
         env.step(atn)
         tick += 1
 
-    print(f'SPS: %f', env.num_agents * tick / (time.time() - start))
+    print("SPS: %f", env.num_agents * tick / (time.time() - start))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_performance()
