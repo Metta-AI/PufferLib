@@ -36,7 +36,7 @@ from torch.utils.cpp_extension import (
 )
 
 
-VERSION = "2.0.6"
+VERSION = "3.0.0"
 
 # Build with DEBUG=1 to enable debug symbols
 DEBUG = os.getenv("DEBUG", "0") == "1"
@@ -465,7 +465,7 @@ setup(
     },
     include_package_data=True,
     install_requires=[
-        'numpy<2',
+        'numpy==2.2.6',
         'opencv-python==3.4.17.63',
         'rich',
         'rich_argparse',
