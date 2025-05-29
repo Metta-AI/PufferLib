@@ -36,7 +36,7 @@ from torch.utils.cpp_extension import (
 )
 
 
-VERSION = "2.0.6"
+VERSION = "3.0.0"
 
 # Build with DEBUG=1 to enable debug symbols
 DEBUG = os.getenv("DEBUG", "0") == "1"
