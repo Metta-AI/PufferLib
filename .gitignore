@@ -148,6 +148,8 @@ experiments/
 wandb/
 .neptune/
 raylib*/
+.vscode/launch.json
+raylib-5.0_*
 
 # TODO: remove
 # Temp Impulse Wars files
