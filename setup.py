@@ -59,7 +59,7 @@ def download_raylib(platform, ext):
         os.remove(platform + ext)
         urllib.request.urlretrieve(RLIGHTS_URL, platform + '/include/rlights.h')
 
-#download_raylib('raylib-5.5_webassembly', '.zip')
+download_raylib('raylib-5.5_webassembly', '.zip')
 
 # Shared compile args for all platforms
 extra_compile_args = [
@@ -118,7 +118,7 @@ if system == 'Linux':
     extra_link_args += [
         '-Bsymbolic-functions',
     ]
-    #download_raylib('raylib-5.5_linux_amd64', '.tar.gz')
+    download_raylib('raylib-5.5_linux_amd64', '.tar.gz')
 elif system == 'Darwin':
     extra_compile_args += [
         '-Wno-error=int-conversion',
@@ -130,7 +130,7 @@ elif system == 'Darwin':
         '-framework', 'OpenGL',
         '-framework', 'IOKit',
     ]
-    #download_raylib('raylib-5.5_macos', '.tar.gz')
+    download_raylib('raylib-5.5_macos', '.tar.gz')
 else:
     raise ValueError(f'Unsupported system: {system}')
 
