@@ -465,7 +465,7 @@ setup(
     },
     include_package_data=True,
     install_requires=[
-        'numpy==2.2.6',
+        'numpy<2',
         'opencv-python==3.4.17.63',
         'rich',
         'rich_argparse',
