@@ -145,7 +145,7 @@ else:
 # - 0.18-0.21 require setuptools<=65.5.0
 
 GYMNASIUM_VERSION = '1.1.1'
-GYM_VERSION = '0.23'
+GYM_VERSION = '0.26.2'
 PETTINGZOO_VERSION = '1.25.0'
 
 environments = {
@@ -466,7 +466,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'numpy',
-        'opencv-python==3.4.17.63',
+        'opencv-python==4.11.0.86',
         'rich',
         'rich_argparse',
         f'gym<={GYM_VERSION}',
