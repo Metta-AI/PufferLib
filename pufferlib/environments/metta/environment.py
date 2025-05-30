@@ -67,8 +67,10 @@ class MettaPuff(MettaGridEnv):
 
         if all(term) or all(trunc):
             self.reset()
-            if 'agent_raw' in info:
-                del info['agent_raw']
+            # Remove all keys starting with 'agent_raw'
+            for k in list(info.keys()):
+                if k.startswith('agent_raw'):
+                    del info[k]
             if 'episode_rewards' in info:
                 info['score'] = info['episode_rewards']
 
