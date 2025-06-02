@@ -113,7 +113,7 @@ class LSTMWrapper(nn.Module):
                 continue
             if "bias" in name:
                 nn.init.constant_(param, 0)
-            elif "weight" in name:
+            elif "weight" in name and param.ndim >= 2:
                 nn.init.orthogonal_(param, 1.0)
 
         self.lstm = nn.LSTM(input_size, hidden_size)

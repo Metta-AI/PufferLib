@@ -1080,7 +1080,7 @@ def load_config(env_name):
             p.read([puffer_default_config, path])
             if env_name in p['base']['env_name'].split(): break
         else:
-            raise pufferlib.APIUsageError('No config for env_name {}'.format(args.env))
+            raise pufferlib.APIUsageError('No config for env_name {}'.format(env_name))
 
     # Dynamic help menu from config
     for section in p.sections():

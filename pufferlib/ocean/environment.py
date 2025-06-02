@@ -119,6 +119,7 @@ def make_multiagent(buf=None, **kwargs):
 MAKE_FUNCTIONS = {
     'breakout': 'Breakout',
     'blastar': 'Blastar',
+    'convert': 'Convert',
     'pong': 'Pong',
     'enduro': 'Enduro',
     'cartpole': 'Cartpole',
