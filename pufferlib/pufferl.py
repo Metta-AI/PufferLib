@@ -2,7 +2,7 @@
 # - Help menu
 # - Docs link
 #python -m torch.distributed.run --standalone --nnodes=1 --nproc-per-node=1 clean_pufferl.py --env puffer_nmmo3 --mode train
-#from torch.distributed.elastic.multiprocessing.errors import record
+from torch.distributed.elastic.multiprocessing.errors import record
 #@record
 
 import warnings
@@ -308,6 +308,7 @@ class PuffeRL:
         profile.end()
         return self.stats
 
+    @record
     def train(self):
         profile = self.profile
         epoch = self.epoch
@@ -472,9 +473,12 @@ class PuffeRL:
             'uptime': time.time() - self.start_time,
             'epoch': int(dist_sum(self.epoch, device)),
             'learning_rate': self.optimizer.param_groups[0]["lr"],
-            **{f'environment/{k}': dist_mean(v, device) for k, v in self.stats.items()},
-            **{f'losses/{k}': dist_mean(v, device) for k, v in self.losses.items()},
-            **{f'performance/{k}': dist_sum(v['elapsed'], device) for k, v in self.profile},
+            **{f'environment/{k}': v for k, v in self.stats.items()},
+            **{f'losses/{k}': v for k, v in self.losses.items()},
+            **{f'performance/{k}': v['elapsed'] for k, v in self.profile},
+            #**{f'environment/{k}': dist_mean(v, device) for k, v in self.stats.items()},
+            #**{f'losses/{k}': dist_mean(v, device) for k, v in self.losses.items()},
+            #**{f'performance/{k}': dist_sum(v['elapsed'], device) for k, v in self.profile},
         }
 
         if torch.distributed.is_initialized():
@@ -524,8 +528,13 @@ class PuffeRL:
 
     def print_dashboard(self, clear=False, idx=[0],
             c1='[cyan]', c2='[white]', b1='[bright_cyan]', b2='[bright_white]'):
-        profile = self.profile
         config = self.config
+        sps = dist_sum(self.sps, config['device'])
+        if torch.distributed.is_initialized():
+           if torch.distributed.get_rank() != 0:
+               return
+ 
+        profile = self.profile
         console = Console()
         dashboard = Table(box=rich.box.ROUNDED, expand=True,
             show_header=False, border_style='bright_cyan')
@@ -548,7 +557,6 @@ class PuffeRL:
         idx[0] = (idx[0] - 1) % 10
             
         s = Table(box=None, expand=True)
-        sps = self.sps
         remaining = 'A hair past a freckle'
         if sps != 0:
             remaining = duration((config['total_timesteps'] - self.global_step)/sps, b2, c2)
@@ -828,7 +836,25 @@ def train(env_name, args=None, vecenv=None, policy=None, logger=None):
 
     # Assume TorchRun DDP is used if LOCAL_RANK is set
     if 'LOCAL_RANK' in os.environ:
-        torch.distributed.init_process_group(backend='nccl', rank=0, world_size=1)
+        world_size = int(os.environ.get('WORLD_SIZE', 1))
+        print("World size", world_size)
+        master_addr = os.environ.get('MASTER_ADDR', 'localhost')
+        master_port = os.environ.get('MASTER_PORT', '29500')
+        local_rank = int(os.environ["LOCAL_RANK"])
+        print(f"rank: {local_rank}, MASTER_ADDR={master_addr}, MASTER_PORT={master_port}")
+        torch.cuda.set_device(local_rank)
+        args['train']['device'] = torch.cuda.current_device()
+        torch.distributed.init_process_group(backend='nccl', world_size=world_size)
+        policy = policy.to(local_rank)
+        model = torch.nn.parallel.DistributedDataParallel(
+            policy, device_ids=[local_rank], output_device=local_rank
+        )
+        if hasattr(policy, 'lstm'):
+            model.lstm = policy.lstm
+            model.hidden_size = policy.hidden_size
+
+        model.forward_train = policy.forward_train
+        policy = model.to(local_rank)
 
     if args['neptune']:
         logger = NeptuneLogger(args)
@@ -1083,6 +1109,12 @@ def load_config(env_name):
             raise pufferlib.APIUsageError('No config for env_name {}'.format(env_name))
 
     # Dynamic help menu from config
+    def auto_type(value):
+        """Type inference for numeric args that use 'auto' as a default value"""
+        if value == 'auto': return value
+        if value.isnumeric(): return int(value)
+        return float(value)
+
     for section in p.sections():
         for key in p[section]:
             try:
@@ -1091,7 +1123,11 @@ def load_config(env_name):
                 value = p[section][key]
 
             fmt = f'--{key}' if section == 'base' else f'--{section}.{key}'
-            parser.add_argument(fmt.replace('_', '-'), default=value, type=type(value))
+            parser.add_argument(
+                fmt.replace('_', '-'),
+                default=value,
+                type=auto_type if value == 'auto' else type(value)
+            )
 
     parser.add_argument('-h', '--help', default=argparse.SUPPRESS,
         action='help', help='Show this help message and exit')
