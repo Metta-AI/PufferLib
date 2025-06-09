@@ -60,10 +60,62 @@ class MettaPuff(MettaGridEnv):
 
     @property
     def single_action_space(self):
-        return gymnasium.spaces.MultiDiscrete(super().single_action_space.nvec, dtype=np.int32)
+        # Return a consistent action space of MultiDiscrete([8, 4])
+        # This allows the policy to generate any action type (0-7) with any argument (0-3)
+        # We'll clamp invalid arguments in the step method
+        return gymnasium.spaces.MultiDiscrete([8, 4], dtype=np.int32)
+
+    def _clamp_action_arguments(self, actions):
+        """
+        Clamp action arguments to valid ranges for each action type.
+        
+        Args:
+            actions: numpy array of shape (num_agents, 2) where [:,0] is action type and [:,1] is argument
+            
+        Returns:
+            clamped_actions: numpy array with invalid arguments clamped to valid ranges
+        """
+        # Create a copy to avoid modifying the original
+        clamped_actions = actions.copy()
+        
+        # Get action names to map indices to action types
+        action_names = self.action_names
+        
+        # Define valid argument ranges for each action type
+        # Based on the max_arg() values from the C++ action handlers
+        action_arg_limits = {
+            'noop': 0,              # max_arg() = 0, accepts [0]
+            'move': 1,              # max_arg() = 1, accepts [0, 1] 
+            'rotate': 3,            # max_arg() = 3, accepts [0, 1, 2, 3]
+            'get_output': 0,        # max_arg() = 0, accepts [0]
+            'put_recipe_items': 0,  # max_arg() = 0, accepts [0]
+            'attack': 0,            # max_arg() = 0, accepts [0]
+            'attack_nearest': 0,    # max_arg() = 0, accepts [0]
+            'swap': 0,              # max_arg() = 0, accepts [0]
+            'change_color': 3,      # max_arg() = 3, accepts [0, 1, 2, 3]
+        }
+        
+        # Clamp arguments for each agent's action
+        for i in range(clamped_actions.shape[0]):
+            action_type = clamped_actions[i, 0]
+            action_arg = clamped_actions[i, 1]
+            
+            # Get the action name for this action type index
+            if 0 <= action_type < len(action_names):
+                action_name = action_names[action_type]
+                max_valid_arg = action_arg_limits.get(action_name, 0)
+                
+                # Clamp the argument to the valid range [0, max_valid_arg]
+                clamped_actions[i, 1] = np.clip(action_arg, 0, max_valid_arg)
+        
+        return clamped_actions
 
     def step(self, actions):
-        obs, rew, term, trunc, info = super().step(actions)
+        # Clamp action arguments to valid ranges before passing to the environment
+        clamped_actions = self._clamp_action_arguments(actions)
+        
+        # Call parent step with clamped actions
+        obs, rew, term, trunc, info = super().step(clamped_actions)
 
         if all(term) or all(trunc):
             self.reset()
