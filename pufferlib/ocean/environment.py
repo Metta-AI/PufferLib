@@ -128,6 +128,7 @@ MAKE_FUNCTIONS = {
     'nmmo3': 'NMMO3',
     'snake': 'Snake',
     'squared': 'Squared',
+    'school': 'School',
     'pysquared': 'PySquared',
     'connect4': 'Connect4',
     'terraform': 'Terraform',
