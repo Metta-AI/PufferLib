@@ -55,12 +55,12 @@ def oc_divide(a, b):
 class MettaPuff(MettaGridEnv):
     def __init__(self, config, render_mode='human', buf=None, seed=0):
         super().__init__(config, render_mode=render_mode, buf=buf)
-        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
-        self.actions = self.actions.astype(np.int32)
+        #self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
+        #self.actions = self.actions.astype(np.int32)
 
-    @property
-    def single_action_space(self):
-        return gymnasium.spaces.MultiDiscrete(super().single_action_space.nvec, dtype=np.int32)
+    #@property
+    #def single_action_space(self):
+    #    return gymnasium.spaces.MultiDiscrete(super().single_action_space.nvec, dtype=np.int32)
 
     def step(self, actions):
         obs, rew, term, trunc, info = super().step(actions)
