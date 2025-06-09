@@ -93,6 +93,9 @@ int main() {
                 }
 
             }
+            env.actions[3*i] = 4;
+            env.actions[3*i + 1] = 4;
+            env.actions[3*i + 2] = 4;
             //float dpitch = atan2f(dz, sqrtf(dx*dx + dy*dy));
             //float droll = asinf(dz/sqrtf(dx*dx + dy*dy + dz*dz));
             //env.actions[3*i] = 6;
@@ -121,6 +124,35 @@ int main() {
             Camera3D* camera = &(env.client->camera);
             camera->target = (Vector3){x, y, z};
 
+            /*
+            Entity* agent = &env.agents[i];
+            Vec3 forward = quat_rotate(agent->orientation, (Vec3){0, 0, -1}); // Ship's local forward
+            vec3_normalize(&forward);
+
+            Vec3 local_up = quat_rotate(agent->orientation, (Vec3){0, 1, 0}); // Ship's local up
+            vec3_normalize(&local_up);
+
+            // Compute negative forward and negative local up
+            Vec3 neg_forward = {-forward.x, -forward.y, -forward.z};
+            Vec3 neg_local_up = {-local_up.x, -local_up.y, -local_up.z};
+
+            // Compute the vector 45 degrees between neg_forward and neg_local_up
+            // Since forward and local_up are orthogonal, averaging gives a 45-degree angle
+            Vec3 camera_dir = {
+                neg_forward.x + neg_local_up.x,
+                neg_forward.y + neg_local_up.y,
+                neg_forward.z + neg_local_up.z
+            };
+            vec3_normalize(&camera_dir);
+            printf("camera_dir: %f %f %f\n", camera_dir.x, camera_dir.y, camera_dir.z);
+
+            // Scale by desired distance and offset from ship's position
+            camera->position = (Vector3){
+                agent->x + 1.0f*camera_dir.x,
+                agent->y + 1.0f*camera_dir.y,
+                agent->z + 1.0f*camera_dir.z
+            };
+
             float dd = sqrtf(vx*vx + vy*vy + vz*vz);
             float forward_x = vx / dd;
             float forward_y = vy / dd;
@@ -132,6 +164,7 @@ int main() {
                 y - dist*forward_y + 0.5f,
                 z - dist*forward_z
             };
+            */
 
             env.actions[3*i] = 4;
             if (IsKeyDown(KEY_W)) {

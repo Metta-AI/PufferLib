@@ -74,7 +74,7 @@ typedef struct {
     float max_speed;
     float attack_damage;
     float attack_range;
-    Vec3 orientation;
+    Quat orientation;
     float yaw;
     int item;
     int unit;
@@ -163,6 +163,21 @@ void perlin_noise(float* map, int width, int height,
     }
 }
 
+Matrix PufQuaternionToMatrix(Quat q) {
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    float x2 = x * x, y2 = y * y, z2 = z * z;
+    float xy = x * y, xz = x * z, yz = y * z;
+    float wx = w * x, wy = w * y, wz = w * z;
+
+    Matrix m = {
+        1.0f - 2.0f * (y2 + z2), 2.0f * (xy - wz), 2.0f * (xz + wy), 0.0f,
+        2.0f * (xy + wz), 1.0f - 2.0f * (x2 + z2), 2.0f * (yz - wx), 0.0f,
+        2.0f * (xz - wy), 2.0f * (yz + wx), 1.0f - 2.0f * (x2 + y2), 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    return m;
+}
+
 void init(School* env) {
     env->agents = calloc(env->num_agents, sizeof(Entity));
     env->factories = calloc(env->num_factories, sizeof(Entity));
@@ -223,7 +238,7 @@ void respawn(School* env, Entity* agent) {
     //agent->y = randf(-env->size_y, env->size_y);
     //agent->z = randf(-env->size_z, env->size_z);
     int team = agent->item;
-    agent->orientation = (Vec3){1, 0, 0};
+    agent->orientation = (Quat){1, 0, 0, 0};
     if (agent->unit != MOTHERSHIP) {
         int agents_per_team = env->num_agents / env->num_resources;
         int team_mothership_idx = team*agents_per_team;
@@ -483,6 +498,14 @@ static inline void quat_normalize(Quat *q) {
   }
 }
 
+Vec3 vec3_cross(Vec3 a, Vec3 b) {
+    Vec3 result;
+    result.x = a.y * b.z - a.z * b.y;
+    result.y = a.z * b.x - a.x * b.z;
+    result.z = a.x * b.y - a.y * b.x;
+    return result;
+}
+
 static inline void vec3_normalize(Vec3 *v) {
   float n = sqrtf(v->x * v->x + v->y * v->y + v->z * v->z);
   v->x /= n;
@@ -500,9 +523,6 @@ static inline Vec3 quat_rotate(Quat q, Vec3 v) {
 
 static inline Quat quat_from_axis_angle(Vec3 axis, float angle) {
     float norm = norm3(axis);
-    if (norm < 0.0001f) { // Handle zero axis
-        return (Quat){1.0f, 0.0f, 0.0f, 0.0f}; // Identity quaternion
-    }
     Vec3 norm_axis = {axis.x / norm, axis.y / norm, axis.z / norm};
     float s = sinf(angle / 2.0f);
     float c = cosf(angle / 2.0f);
@@ -566,9 +586,12 @@ void move_basic(School* env, Entity* agent, int* actions) {
 void move_ground(School* env, Entity* agent, int* actions) {
     float d_theta = -((float)actions[1] - 4.0f)/40.0f;
 
-    float x = agent->orientation.x;
-    float y = agent->orientation.y;
-    float z = agent->orientation.z;
+    /*
+    Vec3 forward = quat_rotate(agent->orientation_quat, (Vec3){0, 0, -1});
+    float x = forward.x;
+    float y = forward.y;
+    float z = forward.z;
+
     agent->orientation = (Vec3){
         cosf(d_theta)*x - sinf(d_theta)*z,
         y,
@@ -585,55 +608,74 @@ void move_ground(School* env, Entity* agent, int* actions) {
     agent->x = clip(agent->x, -env->size_x, env->size_x);
     agent->z = clip(agent->z, -env->size_z, env->size_z);
     agent->y = ground_height(env, agent->x, agent->z);
+    */
 }
 
-void move_ship(School* env, Entity* agent, int* actions) {
+void move_ship(School* env, Entity* agent, int* actions, int i) {
     // Compute deltas from actions (same as original)
     float d_pitch = agent->max_turn * ((float)actions[0] - 4.0f) / 40.0f;
     float d_roll = agent->max_turn * ((float)actions[1] - 4.0f) / 40.0f;
-    //float d_yaw = agent->max_turn * ((float)actions[2] - 4.0f) / 20.0f;
+    
 
     // Update speed and clamp
     agent->speed = agent->max_speed * MAX_SPEED;
 
-    // Create rotation quaternions
-    float d_yaw = d_roll;
-    Quat q_yaw = quat_from_axis_angle((Vec3){0, 1, 0}, d_yaw);
-    Quat q_pitch = quat_from_axis_angle((Vec3){1, 0, 0}, d_pitch);
-    Quat q_roll = quat_from_axis_angle((Vec3){0, 0, 1}, d_roll);
 
-    Quat q = quat_mul(q_roll, quat_mul(q_pitch, q_yaw));
-    quat_normalize(&q);
-
-    Vec3 forward = quat_rotate(q, agent->orientation);
+    Vec3 forward = quat_rotate(agent->orientation, (Vec3){0, 0, -1}); // Ship's local forward
     vec3_normalize(&forward);
 
-    agent->orientation = forward;
+    Vec3 local_up = quat_rotate(agent->orientation, (Vec3){0, 1, 0}); // Ship's local up
+    vec3_normalize(&local_up);
 
-    // Get local axes in world coordinates for pitch and roll
-    //Vec3 x_axis = quat_rotate(agent->orientation, (Vec3){1.0f, 0.0f, 0.0f}); // Pitch axis
-    //Vec3 z_axis = quat_rotate(agent->orientation, (Vec3){0.0f, 0.0f, 1.0f}); // Roll axis
-    //Vec3 y_axis = quat_rotate(agent->orientation, (Vec3){0.0f, 1.0f, 0.0f}); // Yaw axis
+    Vec3 right = vec3_cross(forward, local_up); // Ship's local right
+    vec3_normalize(&right);
 
-    // Update orientation: pitch, then roll (no yaw in original)
     /*
-    Quat transform = quat_mul(q_roll, q_pitch);
-    quat_normalize(&transform);
-    agent->orientation = quat_mul(agent->orientation, transform);
-    quat_normalize(&agent->orientation);
-    //agent->orientation = quat_mul(agent->orientation, q_pitch);
-    //agent->orientation = quat_mul(agent->orientation, q_roll);
-    //agent->orientation = quat_mul(agent->orientation, q_yaw);
-    quat_normalize(&agent->orientation);
+    float roll_angle = 2*atan2f(agent->orientation.z, agent->orientation.z);
 
-    // Update position (move along local z-axis)
-    Vec3 forward = quat_rotate(agent->orientation, (Vec3){0.0f, 0.0f, 1.0f});
-    //Vec3 forward = {agent->orientation.x, agent->orientation.y, agent->orientation.z};
+    Vec3 forward = quat_rotate(agent->orientation, (Vec3){0, 0, -1}); // Base forward
+
+    vec3_normalize(&forward);
+    Vec3 up = {0.0f, 1.0f, 0.0f};
+    Vec3 right = vec3_cross(forward, up);
+    vec3_normalize(&right);
+    Vec3 local_up = vec3_cross(right, forward);
+    vec3_normalize(&local_up);
     */
 
-    agent->x += agent->speed * forward.x;
-    agent->y += agent->speed * forward.y;
-    agent->z += agent->speed * forward.z;
+    // Create rotation quaternions
+    if (i == 0) {
+        printf("actions: %d %d %d\n", actions[0], actions[1], actions[2]);
+        printf("orientation: %f %f %f %f\n", agent->orientation.w, agent->orientation.x, agent->orientation.y, agent->orientation.z);
+        printf("Local up: %f %f %f\n", local_up.x, local_up.y, local_up.z);
+        printf("Forward: %f %f %f\n", forward.x, forward.y, forward.z);
+        printf("Right: %f %f %f\n", right.x, right.y, right.z);
+        printf("d_pitch: %f\n, d_roll: %f\n", d_pitch, d_roll);
+    }
+
+    float d_yaw = 0.0;
+    Quat q_yaw = quat_from_axis_angle(local_up, d_yaw);
+    Quat q_roll = quat_from_axis_angle(forward, d_roll);
+    Quat q_pitch = quat_from_axis_angle(right, d_pitch);
+
+    if (i == 0) {
+        printf("q_yaw: %f %f %f %f\n", q_yaw.w, q_yaw.x, q_yaw.y, q_yaw.z);
+        printf("q_roll: %f %f %f %f\n", q_roll.w, q_roll.x, q_roll.y, q_roll.z);
+        printf("q_pitch: %f %f %f %f\n", q_pitch.w, q_pitch.x, q_pitch.y, q_pitch.z);
+    }
+
+    Quat q = quat_mul(q_roll, quat_mul(q_pitch, q_yaw));
+    //Quat q = q_roll;
+    quat_normalize(&q);
+
+    forward = quat_rotate(q, forward);
+    vec3_normalize(&forward);
+
+    agent->orientation = quat_mul(q, agent->orientation);
+
+    //agent->x += agent->speed * forward.x;
+    //agent->y += agent->speed * forward.y;
+    //agent->z += agent->speed * forward.z;
 
     // Just for visualization
     agent->vx = agent->speed * forward.x;
@@ -730,7 +772,7 @@ void c_reset(School* env) {
             }
 
             agent->item = team;
-            agent->orientation = (Vec3){1, 0, 0};
+            agent->orientation = (Quat){1, 0, 0, 0};
             agent->episode_length = 0;
             agent->target = -1;
             update_abilities(agent);
@@ -777,7 +819,7 @@ void c_step(School* env) {
         if (agent->unit == INFANTRY || agent->unit == TANK || agent->unit == ARTILLERY) {
             move_ground(env, agent, env->actions + 3*i);
         } else {
-            move_ship(env, agent, env->actions + 3*i);
+            move_ship(env, agent, env->actions + 3*i, i);
         }
 
         if (rand() % env->num_agents == 0) {
@@ -1152,12 +1194,11 @@ void c_render(School* env) {
                 0, 0, 0, 1
             };
             */
-            Vector3 pos = {agent->x, agent->y, agent->z};
-            Vector3 look = {agent->orientation.x, agent->orientation.y, agent->orientation.z};
-            Vector3 up = {0.0f, 1.0f, 0.0f};
-            client->ship.transform = MatrixLookAt(pos, look, up);
-            client->ground.transform = MatrixLookAt(pos, look, up);
 
+
+
+
+            Vector3 pos = {agent->x, agent->y, agent->z};
             float v_norm = sqrtf(agent->vx*agent->vx + agent->vy*agent->vy + agent->vz*agent->vz);
             float xx = agent->vx / v_norm;
             float yy = agent->vy / v_norm;
@@ -1167,17 +1208,33 @@ void c_render(School* env) {
 
             //Vector3 angle = {agent->pitch, agent->yaw, agent->roll};
             Vector3 angle = {pitch, yaw, 0.0f};
+            //client->ship.transform = MatrixRotateXYZ(angle);
+            //client->ground.transform = MatrixRotateXYZ(angle);
 
+
+            Vec3 forward = quat_rotate(agent->orientation, (Vec3){0, 0, -1}); // Base forward
+            vec3_normalize(&forward);
+            Vec3 up = {0.0f, 1.0f, 0.0f};
+            Vec3 right = vec3_cross(forward, up);
+            vec3_normalize(&right);
+            Vec3 local_up = vec3_cross(right, forward);
+            vec3_normalize(&local_up);
+
+            // Construct rotation matrix from basis vectors
             /*
-            rlPushMatrix();
-            rlTranslatef(0.0f, 0.0f, 0.0f);
-            rlRotatef(-90.0f, 0, 0, 90.0f);
-            DrawModel(env->client->ship, (Vector3){0, 0, 0}, 1.0f, WHITE);
-            rlPopMatrix();
+            Matrix transform = {
+                right.x, right.y, right.z, 0.0f,    // x-axis (right)
+                local_up.x, local_up.y, local_up.z, 0.0f, // y-axis (up)
+                -forward.x, -forward.y, -forward.z, 0.0f, // z-axis (-forward for OpenGL)
+                0.0f, 0.0f, 0.0f, 1.0f             // homogeneous coordinate
+            };
             */
 
-            client->ship.transform = MatrixRotateXYZ(angle);
-            client->ground.transform = MatrixRotateXYZ(angle);
+
+            Matrix transform = PufQuaternionToMatrix(agent->orientation);
+
+            client->ship.transform = transform;
+            client->ground.transform = transform; // If ground should follow ship orientation
 
             Vector3 scale;
             Model model;
