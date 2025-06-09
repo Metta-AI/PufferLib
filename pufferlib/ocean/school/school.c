@@ -93,9 +93,9 @@ int main() {
                 }
 
             }
-            env.actions[3*i] = 4;
-            env.actions[3*i + 1] = 4;
-            env.actions[3*i + 2] = 4;
+            //env.actions[3*i] = 4;
+            //env.actions[3*i + 1] = 4;
+            //env.actions[3*i + 2] = 4;
             //float dpitch = atan2f(dz, sqrtf(dx*dx + dy*dy));
             //float droll = asinf(dz/sqrtf(dx*dx + dy*dy + dz*dz));
             //env.actions[3*i] = 6;
@@ -123,6 +123,22 @@ int main() {
 
             Camera3D* camera = &(env.client->camera);
             camera->target = (Vector3){x, y, z};
+
+
+            Entity* agent = &env.agents[i];
+            Vector3 forward = Vector3RotateByQuaternion((Vector3){0, 0, 1}, agent->orientation);
+
+            Vector3 local_up = Vector3RotateByQuaternion((Vector3){0, 1, 0}, agent->orientation);
+            local_up = Vector3Normalize(local_up);
+
+            camera->target = (Vector3){agent->x, agent->y, agent->z};
+
+            camera->position = (Vector3){
+                agent->x + 0.5*(- forward.x),
+                agent->y + 0.5*(- forward.y) + 0.5f,
+                agent->z + 0.5*(- forward.z)
+            };
+
 
             /*
             Entity* agent = &env.agents[i];
@@ -175,9 +191,9 @@ int main() {
 
             env.actions[3*i + 1] = 4;
             if (IsKeyDown(KEY_A)) {
-                env.actions[3*i + 1] = 6;
-            } else if (IsKeyDown(KEY_D)) {
                 env.actions[3*i + 1] = 2;
+            } else if (IsKeyDown(KEY_D)) {
+                env.actions[3*i + 1] = 6;
             }
         }
 
