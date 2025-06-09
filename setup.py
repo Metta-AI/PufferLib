@@ -45,28 +45,94 @@ RLIGHTS_URL = "https://raw.githubusercontent.com/raysan5/raylib/refs/heads/maste
 
 
 def download_raylib(platform, ext):
-    if not os.path.exists(platform):
+    """Download and extract raylib with proper error handling for CI environments."""
+    import tempfile
+    import time
+
+    # Use a lock file to prevent concurrent downloads
+    lock_file = platform + ".lock"
+    max_wait = 60  # seconds
+    start_time = time.time()
+
+    # Wait for any ongoing download to complete
+    while os.path.exists(lock_file) and (time.time() - start_time) < max_wait:
+        print(f"Waiting for another process to finish downloading {platform}...")
+        time.sleep(1)
+
+    # Check if already successfully downloaded
+    success_marker = platform + ".success"
+    if os.path.exists(success_marker) and os.path.exists(platform):
+        print(f"{platform} already downloaded successfully")
+        return
+
+    # Clean up any partial downloads
+    if os.path.exists(platform) and not os.path.exists(success_marker):
+        print(f"Cleaning up partial download of {platform}")
+        shutil.rmtree(platform, ignore_errors=True)
+
+    # Create lock file
+    try:
+        with open(lock_file, "w") as f:
+            f.write(str(os.getpid()))
+
+        # Download to a temporary file first
+        temp_file = None
         try:
             print(f"Downloading {platform}{ext}...")
-            urllib.request.urlretrieve(RAYLIB_URL + platform + ext, platform + ext)
-            if ext == ".zip":
-                with zipfile.ZipFile(platform + ext, "r") as zip_ref:
-                    zip_ref.extractall()
-            else:
-                with tarfile.open(platform + ext, "r") as tar_ref:
-                    tar_ref.extractall()
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=ext)
+            urllib.request.urlretrieve(RAYLIB_URL + platform + ext, temp_file.name)
+            temp_file.close()
 
-            os.remove(platform + ext)
-            # Create the include directory if it doesn't exist
+            # Extract to a temporary directory first
+            temp_dir = tempfile.mkdtemp()
+            if ext == ".zip":
+                with zipfile.ZipFile(temp_file.name, "r") as zip_ref:
+                    zip_ref.extractall(temp_dir)
+            else:
+                with tarfile.open(temp_file.name, "r") as tar_ref:
+                    tar_ref.extractall(temp_dir)
+
+            # Move the extracted content to the final location
+            extracted_dir = os.path.join(temp_dir, platform)
+            if os.path.exists(extracted_dir):
+                shutil.move(extracted_dir, platform)
+            else:
+                # Sometimes the archive extracts directly without a parent folder
+                shutil.move(temp_dir, platform)
+
+            # Download rlights.h
             include_dir = os.path.join(platform, "include")
             os.makedirs(include_dir, exist_ok=True)
             urllib.request.urlretrieve(
                 RLIGHTS_URL, os.path.join(include_dir, "rlights.h")
             )
+
+            # Mark as successfully downloaded
+            with open(success_marker, "w") as f:
+                f.write("success")
+
             print(f"Successfully downloaded and extracted {platform}")
+
         except Exception as e:
             print(f"Error downloading {platform}: {e}")
+            # Clean up on error
+            if os.path.exists(platform):
+                shutil.rmtree(platform, ignore_errors=True)
             raise
+        finally:
+            # Clean up temp files
+            if temp_file and os.path.exists(temp_file.name):
+                os.unlink(temp_file.name)
+            if "temp_dir" in locals() and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+    finally:
+        # Remove lock file
+        if os.path.exists(lock_file):
+            try:
+                os.unlink(lock_file)
+            except:
+                pass
 
 
 download_raylib("raylib-5.5_webassembly", ".zip")
