@@ -71,7 +71,6 @@ class MettaPuff(MettaGridEnv):
         self.actions = self.actions.astype(np.int32)
     
     def _build_action_mapping(self):
-        # Build the flattened action space mapping
         self.arg_counts = [max_arg + 1 for max_arg in self.max_action_args]
         self.n_actions = sum(self.arg_counts)
         self.action_map = np.zeros((self.n_actions, 2), dtype=np.int32)
@@ -94,7 +93,6 @@ class MettaPuff(MettaGridEnv):
     def step(self, actions):
         actions = np.asarray(actions, dtype=np.int32)
         
-        # Convert flat discrete actions to MultiDiscrete format
         unflattened_actions = np.array([
             self.action_map[a] for a in actions
         ], dtype=np.int32)
@@ -106,7 +104,8 @@ class MettaPuff(MettaGridEnv):
                 del info['agent_raw']
             if 'episode_rewards' in info:
                 info['score'] = info['episode_rewards']
+
         else:
             info = []
-        
+ 
         return obs, rew, term, trunc, [info]
