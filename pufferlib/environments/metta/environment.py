@@ -7,14 +7,6 @@ import pufferlib
 from mettagrid.mettagrid_env import MettaGridEnv
 from mettagrid.curriculum import SingleTaskCurriculum
 
-import functools
-import numpy as np
-import gymnasium
-from gymnasium.spaces import Discrete
-import pufferlib
-
-from mettagrid.mettagrid_env import MettaGridEnv
-from mettagrid.curriculum import SingleTaskCurriculum
 
 class MettaActionAdapter:
     """Adapter to convert between flat discrete actions and MettaGrid's MultiDiscrete format."""
@@ -50,7 +42,7 @@ class MettaActionAdapter:
     
     def get_flat_action_space(self):
         """Get the flattened discrete action space."""
-        return Discrete(self.n_actions)
+        return gymnasium.spaces.Discrete(self.n_actions)
     
     def unflatten_from_discrete(self, flat_action):
         """Convert flat discrete action to (action_type, action_arg)."""
@@ -76,28 +68,25 @@ class MettaActionAdapter:
         print(f"\nFlattened action space: Discrete({self.n_actions})")
 
 
-class MettaPuffWrapper(gymnasium.Wrapper):
-    """Wrapper that converts MettaGrid's MultiDiscrete action space to flat Discrete."""
+class MettaPuff(MettaGridEnv):
+    """MettaGrid environment with flattened action space for PufferLib compatibility."""
     
-    def __init__(self, env):
-        super().__init__(env)
-        self.action_adapter = MettaActionAdapter(env)
-        self.num_agents = 24
+    def __init__(self, config, render_mode='human', buf=None, seed=0):
+        super().__init__(config, render_mode=render_mode, buf=buf)
         
-        # Override action spaces
+        # Initialize action adapter
+        self.action_adapter = MettaActionAdapter(self)
+        
+        # Override action space with flattened version
         self._single_action_space = self.action_adapter.get_flat_action_space()
-        self._action_space = pufferlib.spaces.joint_space(
-            self._single_action_space, 
-            self.num_agents
-        )
+        self.action_space = pufferlib.spaces.joint_space(self._single_action_space, self.num_agents)
+        
+        # Ensure actions are int32
+        self.actions = self.actions.astype(np.int32)
     
     @property
     def single_action_space(self):
         return self._single_action_space
-    
-    @property
-    def action_space(self):
-        return self._action_space
     
     def step(self, actions):
         # Convert flat discrete actions to MultiDiscrete format
@@ -128,23 +117,20 @@ class MettaPuffWrapper(gymnasium.Wrapper):
         else:
             raise ValueError(f"Invalid action shape: {actions.shape}. Expected (num_agents,) or (num_agents, 1)")
         
-        # Call wrapped environment with unflattened actions
-        obs, rew, term, trunc, info = self.env.step(unflattened_actions)
+        # Call parent's step with unflattened actions
+        obs, rew, term, trunc, info = super().step(unflattened_actions)
         
         # Post-process for pufferlib compatibility
         if all(term) or all(trunc):
-            self.env.reset()
-            if isinstance(info, dict):
-                if 'agent_raw' in info:
-                    del info['agent_raw']
-                if 'episode_rewards' in info:
-                    info['score'] = info['episode_rewards']
-                info = [info]
+            self.reset()
+            if 'agent_raw' in info:
+                del info['agent_raw']
+            if 'episode_rewards' in info:
+                info['score'] = info['episode_rewards']
         else:
-            if not isinstance(info, list):
-                info = []
+            info = []
         
-        return obs, rew, term, trunc, info
+        return obs, rew, term, trunc, [info]
 
 
 # Factory functions
@@ -155,8 +141,10 @@ def oc_divide(a, b):
         return int(result)
     return result
 
+
 def env_creator(name='metta'):
     return functools.partial(make, name)
+
 
 def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='auto', buf=None, seed=0,
          ore_reward=0.25, heart_reward=0.5, battery_reward=0.25):
@@ -177,8 +165,5 @@ def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='au
     # Create curriculum
     curriculum = SingleTaskCurriculum('puffer', cfg)
     
-    # Create base environment
-    base_env = MettaGridEnv(curriculum, render_mode=render_mode, buf=buf)
-    
-    # Wrap with action adapter
-    return MettaPuffWrapper(base_env)
+    # Create and return MettaPuff environment
+    return MettaPuff(curriculum, render_mode=render_mode, buf=buf)
