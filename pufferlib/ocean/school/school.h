@@ -34,6 +34,7 @@
 #define INFANTRY 4
 #define TANK 5
 #define ARTILLERY 6
+#define BASE 7
 
 static inline float clampf(float v, float min, float max) {
   if (v < min)
@@ -80,7 +81,7 @@ typedef struct {
 typedef struct {
     Camera3D camera;
     Light light;
-    Model models[7];
+    Model models[8];
     Mesh* mesh;
     Model model;
     Shader light_shader;
@@ -201,7 +202,7 @@ void init(School* env) {
     env->terrain_width = 256*env->size_x;
     env->terrain_height = 256*env->size_z;
     env->terrain = calloc(env->terrain_width*env->terrain_height, sizeof(float));
-    perlin_noise(env->terrain, env->terrain_width, env->terrain_height, 1.0/128.0, 8, 0, 0, 32);
+    perlin_noise(env->terrain, env->terrain_width, env->terrain_height, 1.0/2048.0, 8, 0, 0, 128);
 }
 
 void update_abilities(Entity* agent) {
@@ -670,7 +671,13 @@ void c_reset(School* env) {
             respawn(env, agent);
         }
     }
-    //for (int i=0; i<env->num_factories; i++)    }
+    for (int i=0; i<env->num_factories; i++) {
+        Entity* factory = &env->factories[i];
+        factory->x = randf(-env->size_x, env->size_x);
+        factory->y = randf(-env->size_y, env->size_y);
+        factory->z = randf(-env->size_z, env->size_z);
+        factory->item = i % env->num_resources;
+    }
     compute_observations(env);
 }
 
@@ -1006,6 +1013,7 @@ void c_render(School* env) {
         client->models[INFANTRY] = LoadModel("resources/school/car.glb");
         client->models[TANK] = LoadModel("resources/school/tank.glb");
         client->models[ARTILLERY] = LoadModel("resources/school/artillery.glb");
+        client->models[BASE] = LoadModel("resources/school/base.glb");
         //env->client->ship = LoadModel("resources/puffer.glb");
         
         char vsPath[256];
@@ -1019,7 +1027,7 @@ void c_render(School* env) {
             (Color){ 180, 180, 190, 255 },    // Softer warm white for tops
             client->light_shader);
 
-        for (int i = 0; i < ARTILLERY; i++) {
+        for (int i = 0; i < 8; i++) {
             Model* m = &client->models[i];
             for (int j = 0; j < m->materialCount; j++) {
                 //m->materials[j].maps[MATERIAL_MAP_DIFFUSE].texture = client->vehicle_texture;
@@ -1031,7 +1039,7 @@ void c_render(School* env) {
         camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };          // Camera up vector (rotation towards target)
         camera.fovy = 45.0f;                                // Camera field-of-view Y
         camera.projection = CAMERA_PERSPECTIVE;             // Camera projection type
-        camera.position = (Vector3){ 0, 3*env->size_y, -3*env->size_z};
+        camera.position = (Vector3){ 0, 5*env->size_y, -3*env->size_z};
         camera.target = (Vector3){ 0, 0, 0};
         client->camera = camera;
 
@@ -1040,8 +1048,8 @@ void c_render(School* env) {
         update_heightmap_mesh(client->mesh, env->terrain, (Vector3){env->terrain_width, 1, env->terrain_height});
 
         client->terrain_shader = LoadShader(
-            TextFormat("resources/terraform/shader_%i.vs", GLSL_VERSION),
-            TextFormat("resources/terraform/shader_%i.fs", GLSL_VERSION)
+            TextFormat("resources/school/shader_%i.vs", GLSL_VERSION),
+            TextFormat("resources/school/shader_%i.fs", GLSL_VERSION)
         );
 
         Image img = GenImageColor(env->terrain_width, env->terrain_height, WHITE);
@@ -1074,7 +1082,7 @@ void c_render(School* env) {
     }
 
     Client* client = env->client;
-    UpdateCamera(&client->camera, CAMERA_ORBITAL);
+    UpdateCamera(&client->camera, CAMERA_THIRD_PERSON);
     //UpdateLightValues(client->light);
     BeginDrawing();
     ClearBackground((Color){6, 24, 24, 255});
@@ -1089,7 +1097,8 @@ void c_render(School* env) {
 
         for (int f=0; f<env->num_factories; f++) {
             Entity* factory = &env->factories[f];
-            DrawSphere((Vector3){factory->x, factory->y, factory->z}, 0.01, COLORS[factory->item]);
+            float y = ground_height(env, factory->x, factory->z);
+            DrawModel(client->models[BASE], (Vector3){factory->x, y, factory->z}, 0.05f, COLORS[factory->item]);
         }
 
         for (int i=0; i<env->num_agents; i++) {

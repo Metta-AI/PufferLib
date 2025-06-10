@@ -22,9 +22,9 @@ int main() {
     School env = {
         .width = 1980,
         .height = 1020,
-        .size_x = 2,
-        .size_y = 0.5,
-        .size_z = 1,
+        .size_x = 4,
+        .size_y = 1.0,
+        .size_z = 4,
         .num_agents = 1024,
         .num_factories = 4,
         .num_resources = 4,
@@ -196,7 +196,6 @@ int main() {
                 env.actions[3*i + 1] = 6;
             }
         }
-
 
         //forward_linearlstm(net, env.observations, env.actions);
         compute_observations(&env);
