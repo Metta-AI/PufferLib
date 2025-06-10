@@ -8,6 +8,45 @@ from mettagrid.mettagrid_env import MettaGridEnv
 from mettagrid.curriculum import SingleTaskCurriculum
 
 
+def env_creator(name='metta'):
+    return functools.partial(make, name)
+
+
+def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='auto', buf=None, seed=0,
+         ore_reward=0.25, heart_reward=0.5, battery_reward=0.25):
+    '''Metta creation function'''
+    from omegaconf import OmegaConf
+    
+    OmegaConf.register_new_resolver("div", oc_divide, replace=True)
+    cfg = OmegaConf.load(config)
+    
+    # Modify rewards
+    reward_cfg = cfg['game']['agent']['rewards']
+    reward_cfg['ore.red'] = ore_reward
+    reward_cfg['ore.blue'] = ore_reward
+    reward_cfg['ore.green'] = ore_reward
+    reward_cfg['heart'] = heart_reward
+    reward_cfg['battery'] = battery_reward
+    
+    # Create curriculum
+    curriculum = SingleTaskCurriculum('puffer', cfg)
+    
+    # Create and return MettaPuff environment
+    return MettaPuff(curriculum, render_mode=render_mode, buf=buf)
+
+
+def oc_divide(a, b):
+    """
+    Divide a by b, returning an int if both inputs are ints and result is a whole number,
+    otherwise return a float.
+    """
+    result = a / b
+    # If both inputs are integers and the result is a whole number, return as int
+    if isinstance(a, int) and isinstance(b, int) and result.is_integer():
+        return int(result)
+    return result
+
+
 class FlattenedDiscrete(gymnasium.spaces.Discrete):
     """A Discrete action space that maintains compatibility with MultiDiscrete validation.
     
@@ -31,7 +70,6 @@ class MettaActionAdapter:
     
     def __init__(self, env):
         """Initialize the adapter with a MettaGrid environment."""
-        # Get the action space info
         self.max_action_args = env.max_action_args
         self.action_names = env.action_names
         
@@ -42,21 +80,11 @@ class MettaActionAdapter:
         # Create mapping from flat index to (action_type, action_arg)
         self.action_map = np.zeros((self.n_actions, 2), dtype=np.int32)
         
-        # Create reverse mapping for debugging
-        self.reverse_map = {}
-        self.flat_to_name = {}
-        
         i = 0
         for action_type, (action_name, arg_count) in enumerate(zip(self.action_names, self.arg_counts)):
             for arg in range(arg_count):
                 self.action_map[i] = (action_type, arg)
-                self.reverse_map[i] = f"{action_name}({arg})"
-                self.flat_to_name[i] = (action_name, arg)
                 i += 1
-        
-        # Store action type to name mapping
-        self.action_type_to_name = {i: name for i, name in enumerate(self.action_names)}
-        self.action_name_to_type = {name: i for i, name in enumerate(self.action_names)}
     
     def get_flat_action_space(self):
         """Get the flattened discrete action space."""
@@ -72,20 +100,6 @@ class MettaActionAdapter:
         else:
             # Single action
             return self.action_map[flat_action]
-    
-    def get_action_description(self, flat_action):
-        """Get human-readable description of action."""
-        return self.reverse_map.get(flat_action, f"unknown_action_{flat_action}")
-    
-    def print_action_space_info(self):
-        """Print detailed information about the action space."""
-        print(f"Total flattened actions: {self.n_actions}")
-        print("\nAction types and their arguments:")
-        for i, (name, max_arg) in enumerate(zip(self.action_names, self.max_action_args)):
-            arg_count = max_arg + 1
-            print(f"  {i}: {name} - args: 0-{max_arg} ({arg_count} options)")
-        
-        print(f"\nFlattened action space: Discrete({self.n_actions})")
 
 
 class MettaPuff(MettaGridEnv):
@@ -158,39 +172,3 @@ class MettaPuff(MettaGridEnv):
             info = []
         
         return obs, rew, term, trunc, [info]
-
-
-# Factory functions
-def oc_divide(a, b):
-    """Divide a by b, returning an int if both inputs are ints and result is a whole number."""
-    result = a / b
-    if isinstance(a, int) and isinstance(b, int) and result.is_integer():
-        return int(result)
-    return result
-
-
-def env_creator(name='metta'):
-    return functools.partial(make, name)
-
-
-def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='auto', buf=None, seed=0,
-         ore_reward=0.25, heart_reward=0.5, battery_reward=0.25):
-    '''Metta creation function with flattened action space'''
-    from omegaconf import OmegaConf
-    
-    OmegaConf.register_new_resolver("div", oc_divide, replace=True)
-    cfg = OmegaConf.load(config)
-    
-    # Modify rewards
-    reward_cfg = cfg['game']['agent']['rewards']
-    reward_cfg['ore.red'] = ore_reward
-    reward_cfg['ore.blue'] = ore_reward
-    reward_cfg['ore.green'] = ore_reward
-    reward_cfg['heart'] = heart_reward
-    reward_cfg['battery'] = battery_reward
-    
-    # Create curriculum
-    curriculum = SingleTaskCurriculum('puffer', cfg)
-    
-    # Create and return MettaPuff environment
-    return MettaPuff(curriculum, render_mode=render_mode, buf=buf)
