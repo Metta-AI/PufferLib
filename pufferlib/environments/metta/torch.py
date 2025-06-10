@@ -36,18 +36,8 @@ class Policy(nn.Module):
           1.,  47.,   3.,   3.,   2.,   1.,   1.,   1.,   1.])[None, :, None, None]
         self.register_buffer('max_vec', max_vec)
 
-        # Handle both Discrete and MultiDiscrete action spaces
-        import gymnasium
-        self.is_multidiscrete = isinstance(env.single_action_space, gymnasium.spaces.MultiDiscrete)
-        
-        if self.is_multidiscrete:
-            action_nvec = env.single_action_space.nvec
-            self.actor = nn.ModuleList([pufferlib.pytorch.layer_init(
-                nn.Linear(hidden_size, n), std=0.01) for n in action_nvec])
-        else:
-            # Discrete action space
-            self.actor = pufferlib.pytorch.layer_init(
-                nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
+        self.actor = pufferlib.pytorch.layer_init(
+	    nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
 
         self.value = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, 1), std=1)
@@ -69,9 +59,6 @@ class Policy(nn.Module):
 
     def decode_actions(self, hidden):
         #hidden = self.layer_norm(hidden)
-        if self.is_multidiscrete:
-            logits = [dec(hidden) for dec in self.actor]
-        else:
-            logits = self.actor(hidden)
+        logits = self.actor(hidden)
         value = self.value(hidden)
         return logits, value
