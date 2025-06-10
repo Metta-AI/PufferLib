@@ -72,21 +72,28 @@ class MettaPuff(MettaGridEnv):
     """MettaGrid environment with flattened action space for PufferLib compatibility."""
     
     def __init__(self, config, render_mode='human', buf=None, seed=0):
+        # Initialize parent
         super().__init__(config, render_mode=render_mode, buf=buf)
         
-        # Initialize action adapter
-        self.action_adapter = MettaActionAdapter(self)
+        # Now parent is initialized, set up our action adapter
+        self._action_adapter = MettaActionAdapter(self)
         
-        # Override action space with flattened version
-        self._single_action_space = self.action_adapter.get_flat_action_space()
-        self.action_space = pufferlib.spaces.joint_space(self._single_action_space, self.num_agents)
+        # Override the joint action space with flattened version
+        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
         
         # Ensure actions are int32
         self.actions = self.actions.astype(np.int32)
     
     @property
     def single_action_space(self):
-        return self._single_action_space
+        """Return flattened single action space."""
+        # During parent initialization, return parent's space
+        # This ensures PufferLib checks pass
+        if not hasattr(self, '_action_adapter'):
+            return super().single_action_space
+        
+        # After initialization, return our flattened space
+        return self._action_adapter.get_flat_action_space()
     
     def step(self, actions):
         # Convert flat discrete actions to MultiDiscrete format
@@ -96,19 +103,19 @@ class MettaPuff(MettaGridEnv):
         if actions.ndim == 1 and len(actions) == self.num_agents:
             # Flat actions for each agent
             unflattened_actions = np.array([
-                self.action_adapter.unflatten_from_discrete(a) 
+                self._action_adapter.unflatten_from_discrete(a) 
                 for a in actions
             ], dtype=np.int32)
         elif actions.ndim == 1 and len(actions) == 1:
             # Single action to broadcast to all agents
-            unflattened = self.action_adapter.unflatten_from_discrete(actions[0])
+            unflattened = self._action_adapter.unflatten_from_discrete(actions[0])
             unflattened_actions = np.tile(unflattened, (self.num_agents, 1))
         elif actions.ndim == 2 and actions.shape[0] == self.num_agents:
             # Already shaped for agents
             if actions.shape[1] == 1:
                 # Single flat action per agent
                 unflattened_actions = np.array([
-                    self.action_adapter.unflatten_from_discrete(a[0]) 
+                    self._action_adapter.unflatten_from_discrete(a[0]) 
                     for a in actions
                 ], dtype=np.int32)
             else:
