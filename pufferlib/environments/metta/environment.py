@@ -4,6 +4,7 @@ import gymnasium
 
 import pufferlib
 
+from mettagrid.mettagrid_env import MettaGridEnv
 from mettagrid.curriculum import SingleTaskCurriculum
 
 def env_creator(name='metta'):
@@ -122,28 +123,10 @@ class MettaPuff(MettaGridEnv):
     def step(self, actions):
         actions = np.asarray(actions, dtype=np.int32)
         
-        if actions.ndim == 1 and len(actions) == self.num_agents:
-            unflattened_actions = np.array([
-                self._action_adapter.unflatten_from_discrete(a) 
-                for a in actions
-            ], dtype=np.int32)
-        elif actions.ndim == 1 and len(actions) == 1:
-            # Single action to broadcast to all agents
-            unflattened = self._action_adapter.unflatten_from_discrete(actions[0])
-            unflattened_actions = np.tile(unflattened, (self.num_agents, 1))
-        elif actions.ndim == 2 and actions.shape[0] == self.num_agents:
-            # Already shaped for agents
-            if actions.shape[1] == 1:
-                # Single flat action per agent
-                unflattened_actions = np.array([
-                    self._action_adapter.unflatten_from_discrete(a[0]) 
-                    for a in actions
-                ], dtype=np.int32)
-            else:
-                # Assume already in (action_type, action_arg) format
-                unflattened_actions = actions
-        else:
-            raise ValueError(f"Invalid action shape: {actions.shape}. Expected (num_agents,) or (num_agents, 1)")
+        unflattened_actions = np.array([
+            self._action_adapter.unflatten_from_discrete(a) 
+            for a in actions
+        ], dtype=np.int32)
         
         obs, rew, term, trunc, info = super().step(unflattened_actions)
         
