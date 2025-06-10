@@ -8,6 +8,24 @@ from mettagrid.mettagrid_env import MettaGridEnv
 from mettagrid.curriculum import SingleTaskCurriculum
 
 
+class FlattenedDiscrete(gymnasium.spaces.Discrete):
+    """A Discrete action space that maintains compatibility with MultiDiscrete validation.
+    
+    This class extends gymnasium's Discrete space to provide an `nvec` property
+    that MettaGrid's validation code expects, while still functioning as a 
+    standard Discrete space for PufferLib.
+    """
+    
+    def __init__(self, n, original_nvec, seed=None):
+        super().__init__(n, seed=seed)
+        self._original_nvec = np.array(original_nvec, dtype=np.int64)
+    
+    @property
+    def nvec(self):
+        """Provide nvec for backward compatibility with MettaGrid validation."""
+        return self._original_nvec
+
+
 class MettaActionAdapter:
     """Adapter to convert between flat discrete actions and MettaGrid's MultiDiscrete format."""
     
@@ -42,7 +60,9 @@ class MettaActionAdapter:
     
     def get_flat_action_space(self):
         """Get the flattened discrete action space."""
-        return gymnasium.spaces.Discrete(self.n_actions)
+        # Create FlattenedDiscrete with original nvec for compatibility
+        original_nvec = [len(self.action_names)] + self.max_action_args
+        return FlattenedDiscrete(self.n_actions, original_nvec)
     
     def unflatten_from_discrete(self, flat_action):
         """Convert flat discrete action to (action_type, action_arg)."""
@@ -78,22 +98,22 @@ class MettaPuff(MettaGridEnv):
         # Now parent is initialized, set up our action adapter
         self._action_adapter = MettaActionAdapter(self)
         
+        # Create flattened action space
+        self._flattened_action_space = self._action_adapter.get_flat_action_space()
+        
         # Override the joint action space with flattened version
-        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
+        self.action_space = pufferlib.spaces.joint_space(self._flattened_action_space, self.num_agents)
         
         # Ensure actions are int32
         self.actions = self.actions.astype(np.int32)
     
     @property
     def single_action_space(self):
-        """Return flattened single action space."""
-        # During parent initialization, return parent's space
-        # This ensures PufferLib checks pass
-        if not hasattr(self, '_action_adapter'):
-            return super().single_action_space
-        
-        # After initialization, return our flattened space
-        return self._action_adapter.get_flat_action_space()
+        """Return flattened single action space for PufferLib."""
+        if hasattr(self, '_flattened_action_space'):
+            return self._flattened_action_space
+        # During initialization, return parent's MultiDiscrete space
+        return super().single_action_space
     
     def step(self, actions):
         # Convert flat discrete actions to MultiDiscrete format
