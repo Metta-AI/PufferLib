@@ -4,36 +4,41 @@ import gymnasium
 
 import pufferlib
 
-from mettagrid.mettagrid_env import MettaGridEnv
 from mettagrid.curriculum import SingleTaskCurriculum
-
 
 def env_creator(name='metta'):
     return functools.partial(make, name)
 
-
 def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='auto', buf=None, seed=0,
          ore_reward=0.25, heart_reward=0.5, battery_reward=0.25):
-    '''Metta creation function'''
+    '''Crafter creation function'''
+    #return MettaPuff(config, render_mode, buf)
+    import mettagrid.mettagrid_env
     from omegaconf import OmegaConf
-    
     OmegaConf.register_new_resolver("div", oc_divide, replace=True)
     cfg = OmegaConf.load(config)
-    
-    # Modify rewards
     reward_cfg = cfg['game']['agent']['rewards']
+    '''
+    env_overrides = {
+        'game': {
+            'agent': {
+                'rewards': {
+                    'ore.red': 0.25,
+                    'ore.blue': 0.25,
+                    'ore.green': 0.25,
+                    'heart': 0.5,
+                    'battery': 0.25,
+                }
+            }
+        }
+    '''
     reward_cfg['ore.red'] = ore_reward
     reward_cfg['ore.blue'] = ore_reward
     reward_cfg['ore.green'] = ore_reward
     reward_cfg['heart'] = heart_reward
     reward_cfg['battery'] = battery_reward
-    
-    # Create curriculum
     curriculum = SingleTaskCurriculum('puffer', cfg)
-    
-    # Create and return MettaPuff environment
     return MettaPuff(curriculum, render_mode=render_mode, buf=buf)
-
 
 def oc_divide(a, b):
     """
@@ -45,7 +50,6 @@ def oc_divide(a, b):
     if isinstance(a, int) and isinstance(b, int) and result.is_integer():
         return int(result)
     return result
-
 
 class FlattenedDiscrete(gymnasium.spaces.Discrete):
     """A Discrete action space that maintains compatibility with MultiDiscrete validation.
@@ -63,7 +67,6 @@ class FlattenedDiscrete(gymnasium.spaces.Discrete):
     def nvec(self):
         """Provide nvec for backward compatibility with MettaGrid validation."""
         return self._original_nvec
-
 
 class MettaActionAdapter:
     """Adapter to convert between flat discrete actions and MettaGrid's MultiDiscrete format."""
@@ -101,24 +104,12 @@ class MettaActionAdapter:
             # Single action
             return self.action_map[flat_action]
 
-
 class MettaPuff(MettaGridEnv):
-    """MettaGrid environment with flattened action space for PufferLib compatibility."""
-    
     def __init__(self, config, render_mode='human', buf=None, seed=0):
-        # Initialize parent
         super().__init__(config, render_mode=render_mode, buf=buf)
-        
-        # Now parent is initialized, set up our action adapter
         self._action_adapter = MettaActionAdapter(self)
-        
-        # Create flattened action space
         self._flattened_action_space = self._action_adapter.get_flat_action_space()
-        
-        # Override the joint action space with flattened version
         self.action_space = pufferlib.spaces.joint_space(self._flattened_action_space, self.num_agents)
-        
-        # Ensure actions are int32
         self.actions = self.actions.astype(np.int32)
     
     @property
@@ -126,16 +117,12 @@ class MettaPuff(MettaGridEnv):
         """Return flattened single action space for PufferLib."""
         if hasattr(self, '_flattened_action_space'):
             return self._flattened_action_space
-        # During initialization, return parent's MultiDiscrete space
         return super().single_action_space
     
     def step(self, actions):
-        # Convert flat discrete actions to MultiDiscrete format
         actions = np.asarray(actions, dtype=np.int32)
         
-        # Handle different input shapes
         if actions.ndim == 1 and len(actions) == self.num_agents:
-            # Flat actions for each agent
             unflattened_actions = np.array([
                 self._action_adapter.unflatten_from_discrete(a) 
                 for a in actions
@@ -158,10 +145,8 @@ class MettaPuff(MettaGridEnv):
         else:
             raise ValueError(f"Invalid action shape: {actions.shape}. Expected (num_agents,) or (num_agents, 1)")
         
-        # Call parent's step with unflattened actions
         obs, rew, term, trunc, info = super().step(unflattened_actions)
         
-        # Post-process for pufferlib compatibility
         if all(term) or all(trunc):
             self.reset()
             if 'agent_raw' in info:
