@@ -38,8 +38,8 @@ def make(name, config='pufferlib/environments/metta/metta.yaml', render_mode='au
     reward_cfg['ore.green'] = ore_reward
     reward_cfg['heart'] = heart_reward
     reward_cfg['battery'] = battery_reward
-    curriculum = SingleTaskCurriculum('puffer', cfg)
-    return MettaPuff(curriculum, render_mode=render_mode, buf=buf)
+    cfg = SingleTaskCurriculum('puffer', cfg)
+    return MettaPuff(cfg, render_mode=render_mode, buf=buf)
 
 def oc_divide(a, b):
     """
@@ -53,13 +53,6 @@ def oc_divide(a, b):
     return result
 
 class FlattenedDiscrete(gymnasium.spaces.Discrete):
-    """A Discrete action space that maintains compatibility with MultiDiscrete validation.
-    
-    This class extends gymnasium's Discrete space to provide an `nvec` property
-    that MettaGrid's validation code expects, while still functioning as a 
-    standard Discrete space for PufferLib.
-    """
-    
     def __init__(self, n, original_nvec, seed=None):
         super().__init__(n, seed=seed)
         self._original_nvec = np.array(original_nvec, dtype=np.int64)
@@ -68,20 +61,19 @@ class FlattenedDiscrete(gymnasium.spaces.Discrete):
     def nvec(self):
         """Provide nvec for backward compatibility with MettaGrid validation."""
         return self._original_nvec
-
-class MettaActionAdapter:
-    """Adapter to convert between flat discrete actions and MettaGrid's MultiDiscrete format."""
-    
-    def __init__(self, env):
-        """Initialize the adapter with a MettaGrid environment."""
-        self.max_action_args = env.max_action_args
-        self.action_names = env.action_names
+class MettaPuff(MettaGridEnv):
+    def __init__(self, config, render_mode='human', buf=None, seed=0):
+        super().__init__(config, render_mode=render_mode, buf=buf)
         
-        # Build the flattened action space
+        # Build flattened action mapping
+        self._build_action_mapping()
+        self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
+        self.actions = self.actions.astype(np.int32)
+    
+    def _build_action_mapping(self):
+        # Build the flattened action space mapping
         self.arg_counts = [max_arg + 1 for max_arg in self.max_action_args]
         self.n_actions = sum(self.arg_counts)
-        
-        # Create mapping from flat index to (action_type, action_arg)
         self.action_map = np.zeros((self.n_actions, 2), dtype=np.int32)
         
         i = 0
@@ -90,46 +82,24 @@ class MettaActionAdapter:
                 self.action_map[i] = (action_type, arg)
                 i += 1
     
-    def get_flat_action_space(self):
-        """Get the flattened discrete action space."""
-        # Create FlattenedDiscrete with original nvec for compatibility
-        original_nvec = [len(self.action_names)] + self.max_action_args
-        return FlattenedDiscrete(self.n_actions, original_nvec)
-    
-    def unflatten_from_discrete(self, flat_action):
-        """Convert flat discrete action to (action_type, action_arg)."""
-        if isinstance(flat_action, (list, np.ndarray)):
-            # Handle batched actions
-            return np.array([self.action_map[a] for a in flat_action])
-        else:
-            # Single action
-            return self.action_map[flat_action]
-
-class MettaPuff(MettaGridEnv):
-    def __init__(self, config, render_mode='human', buf=None, seed=0):
-        super().__init__(config, render_mode=render_mode, buf=buf)
-        self._action_adapter = MettaActionAdapter(self)
-        self._flattened_action_space = self._action_adapter.get_flat_action_space()
-        self.action_space = pufferlib.spaces.joint_space(self._flattened_action_space, self.num_agents)
-        self.actions = self.actions.astype(np.int32)
-    
     @property
     def single_action_space(self):
         """Return flattened single action space for PufferLib."""
-        if hasattr(self, '_flattened_action_space'):
-            return self._flattened_action_space
+        if hasattr(self, 'n_actions'):
+            # Create FlattenedDiscrete with original nvec for compatibility
+            original_nvec = [len(self.action_names)] + self.max_action_args
+            return FlattenedDiscrete(self.n_actions, original_nvec)
         return super().single_action_space
     
     def step(self, actions):
         actions = np.asarray(actions, dtype=np.int32)
         
+        # Convert flat discrete actions to MultiDiscrete format
         unflattened_actions = np.array([
-            self._action_adapter.unflatten_from_discrete(a) 
-            for a in actions
+            self.action_map[a] for a in actions
         ], dtype=np.int32)
         
         obs, rew, term, trunc, info = super().step(unflattened_actions)
-        
         if all(term) or all(trunc):
             self.reset()
             if 'agent_raw' in info:
