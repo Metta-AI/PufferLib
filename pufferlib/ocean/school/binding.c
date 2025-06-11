@@ -10,8 +10,7 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
     env->size_y = unpack(kwargs, "size_y");
     env->size_z = unpack(kwargs, "size_z");
     env->num_agents = unpack(kwargs, "num_agents");
-    env->num_factories = unpack(kwargs, "num_factories");
-    env->num_resources = unpack(kwargs, "num_resources");
+    env->num_armies = unpack(kwargs, "num_armies");
     init(env);
     return 0;
 }
@@ -19,6 +18,7 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
 static int my_log(PyObject* dict, Log* log) {
     assign_to_dict(dict, "perf", log->perf);
     assign_to_dict(dict, "score", log->score);
+    assign_to_dict(dict, "collision_rate", log->collision_rate);
     assign_to_dict(dict, "episode_return", log->episode_return);
     assign_to_dict(dict, "episode_length", log->episode_length);
     return 0;

@@ -9,18 +9,18 @@ from pufferlib.ocean.school import binding
 class School(pufferlib.PufferEnv):
     def __init__(self, num_envs=1, width=1920, height=1080, size_x=1.0,
             size_y=1.0, size_z=1.0, num_agents=1024, num_factories=32,
-            num_resources=8, render_mode=None, log_interval=128, buf=None, seed=0):
+            num_armies=4, render_mode=None, log_interval=128, buf=None, seed=0):
         self.single_observation_space = gymnasium.spaces.Box(low=0, high=1,
-            shape=(3*num_resources + 14 + num_resources,), dtype=np.float32)
+            shape=(6*num_armies + 19 + 8,), dtype=np.float32)
         self.single_action_space = gymnasium.spaces.MultiDiscrete([9, 9, 9])
         self.render_mode = render_mode
         self.num_agents = num_envs*num_agents
         self.log_interval = log_interval
 
-        if num_resources < 1 or num_resources > 8:
-            raise pufferlib.APIUsageError('num_resources must be in [1, 8]')
-        if num_agents % num_resources != 0:
-            raise pufferlib.APIUsageError('num_agents must be a multiple of num_resources')
+        if num_armies < 1 or num_armies > 8:
+            raise pufferlib.APIUsageError('num_armies must be in [1, 8]')
+        if num_agents % num_armies != 0:
+            raise pufferlib.APIUsageError('num_agents must be a multiple of num_armies')
 
         super().__init__(buf)
         c_envs = []
@@ -33,7 +33,7 @@ class School(pufferlib.PufferEnv):
                 self.truncations[i*num_agents:(i+1)*num_agents],
                 seed, width=width, height=height, size_x=size_x, size_y=size_y, size_z=size_z,
                 num_agents=num_agents, num_factories=num_factories,
-                num_resources=num_resources)
+                num_armies=num_armies)
             c_envs.append(c_env)
 
         self.c_envs = binding.vectorize(*c_envs)

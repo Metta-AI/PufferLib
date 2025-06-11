@@ -20,10 +20,8 @@ static int my_log(PyObject* dict, Log* log) {
     assign_to_dict(dict, "perf", log->perf);
     assign_to_dict(dict, "score", log->score);
     assign_to_dict(dict, "episode_return", log->episode_return);
-    assign_to_dict(dict, "episode_length", log->episode_length);
     assign_to_dict(dict, "moves", log->moves);
     assign_to_dict(dict, "food_nb", log->food_nb);
-    assign_to_dict(dict, "agents_alive", log->agents_alive);
     assign_to_dict(dict, "alive_steps", log->alive_steps);
     return 0;
 }

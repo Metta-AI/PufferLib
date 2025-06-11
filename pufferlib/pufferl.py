@@ -2,6 +2,7 @@
 # - Help menu
 # - Docs link
 #python -m torch.distributed.run --standalone --nnodes=1 --nproc-per-node=1 clean_pufferl.py --env puffer_nmmo3 --mode train
+# torchrun --standalone --nnodes=1 --nproc-per-node=6 -m pufferlib.pufferl train puffer_nmmo3
 from torch.distributed.elastic.multiprocessing.errors import record
 
 import warnings
@@ -757,13 +758,14 @@ def downsample_alt(arr, m):
     if len(arr) < m:
         return arr
 
+    orig_arr = arr
     last = arr[-1]
     arr = arr[:-1]
     arr = np.array(arr)
     n = len(arr)
     n = (n//m)*m
     arr = arr[-n:]
-    downsampled = arr.reshape(-1, m).mean(axis=1)
+    downsampled = arr.reshape(m, -1).mean(axis=1)
     return np.concatenate([downsampled, [last]])
 
 class NoLogger:
@@ -976,9 +978,9 @@ def sweep(args=None, env_name=None):
         total_timesteps = args['train']['total_timesteps']
         all_logs = train(env_name, args=args)
         all_logs = [e for e in all_logs if target_key in e]
-        scores = [all_logs[-1][target_key]]
-        costs = [all_logs[-1]['uptime']]
-        timesteps = [all_logs[-1]['agent_steps']]
+        scores = downsample_alt([log[target_key] for log in all_logs], 10)
+        costs = downsample_alt([log['uptime'] for log in all_logs], 10)
+        timesteps = downsample_alt([log['agent_steps'] for log in all_logs], 10)
         for score, cost, timestep in zip(scores, costs, timesteps):
             args['train']['total_timesteps'] = timestep
             sweep.observe(args, score, cost)

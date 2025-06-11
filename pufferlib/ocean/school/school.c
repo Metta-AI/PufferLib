@@ -22,17 +22,16 @@ int main() {
     School env = {
         .width = 1980,
         .height = 1020,
-        .size_x = 4,
-        .size_y = 1.0,
-        .size_z = 4,
+        .size_x = 8,
+        .size_y = 2.0,
+        .size_z = 8,
         .num_agents = 1024,
-        .num_factories = 4,
-        .num_resources = 4,
+        .num_armies = 8,
     };
     init(&env);
 
     // Allocate these manually since they aren't being passed from Python
-    int num_obs = 3*env.num_resources + 14 + env.num_resources;
+    int num_obs = 6*env.num_armies + 19 + 8;
     env.observations = calloc(env.num_agents*num_obs, sizeof(float));
     env.actions = calloc(3*env.num_agents, sizeof(int));
     env.rewards = calloc(env.num_agents, sizeof(float));
@@ -47,16 +46,14 @@ int main() {
     while (!WindowShouldClose()) {
         for (int i=0; i<env.num_agents; i++) {
             Entity* agent = &env.agents[i];
-            int item = agent->item;
-            float vx = env.observations[num_obs*i + 3*item];
-            float vy = env.observations[num_obs*i + 3*item + 1];
-            float vz = env.observations[num_obs*i + 3*item + 2];
-            float yaw = env.observations[num_obs*i + 3*item + 3];
-            float pitch = env.observations[num_obs*i + 3*item + 4];
-            float roll = env.observations[num_obs*i + 3*item + 5];
-            float x = env.observations[num_obs*i + 3*item + 6];
-            float y = env.observations[num_obs*i + 3*item + 7];
-            float z = env.observations[num_obs*i + 3*item + 8];
+            int army = agent->army;
+            float vx = env.observations[num_obs*i + 3*army];
+            float vz = env.observations[num_obs*i + 3*army + 2];
+            float yaw = env.observations[num_obs*i + 3*army + 3];
+            float pitch = env.observations[num_obs*i + 3*army + 4];
+            float x = env.observations[num_obs*i + 3*army + 6];
+            float y = env.observations[num_obs*i + 3*army + 7];
+            float z = env.observations[num_obs*i + 3*army + 8];
 
             if (agent->unit == INFANTRY || agent->unit == TANK || agent->unit == ARTILLERY) {
                 env.actions[3*i] = (vx > 0.0f) ? 6 : 2;
@@ -75,7 +72,6 @@ int main() {
 
                 // Roll control
                 float desired_yaw = atan2f(-x, -z); // Direction to origin
-                float current_yaw = atan2f(vx, vz); // Current velocity direction
                 float yaw_error = desired_yaw - yaw;
 
                 // Normalize yaw_error to [-PI, PI]
@@ -114,12 +110,9 @@ int main() {
                 ctrl = (ctrl + 1) % env.num_agents;
             }
             int i = ctrl;
-            float vx = env.observations[num_obs*i + 3*env.num_resources];
-            float vy = env.observations[num_obs*i + 3*env.num_resources + 1];
-            float vz = env.observations[num_obs*i + 3*env.num_resources + 2];
-            float x = env.observations[num_obs*i + 3*env.num_resources + 6];
-            float y = env.observations[num_obs*i + 3*env.num_resources + 7];
-            float z = env.observations[num_obs*i + 3*env.num_resources + 8];
+            float x = env.observations[num_obs*i + 3*env.num_armies + 6];
+            float y = env.observations[num_obs*i + 3*env.num_armies + 7];
+            float z = env.observations[num_obs*i + 3*env.num_armies + 8];
 
             Camera3D* camera = &(env.client->camera);
             camera->target = (Vector3){x, y, z};
