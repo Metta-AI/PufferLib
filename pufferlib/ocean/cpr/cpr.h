@@ -30,8 +30,8 @@
 #define REWARD_DEATH -1.0f
 
 
-#define LOG_SCORE_REWARD_SMALL 1 
-#define LOG_SCORE_REWARD_MEDIUM 5
+#define LOG_SCORE_REWARD_SMALL 0.1f
+#define LOG_SCORE_REWARD_MEDIUM 0.2f
 #define LOG_SCORE_REWARD_MOVE - 0.0
 #define LOG_SCORE_REWARD_DEATH -1
 
@@ -45,10 +45,8 @@ struct Log {
   float perf;
   float score;
   float episode_return;
-  float episode_length;
   float moves;
   float food_nb;
-  float agents_alive;
   float alive_steps;
   float n;
 };
@@ -118,13 +116,10 @@ struct CCpr {
 };
 
 void add_log(CCpr *env, Log *log) {
-  env->log.episode_return = log->score;
-  env->log.perf = fmaxf(0, 1.0 - 0.01*log->episode_length);
+  env->log.perf = fmaxf(0, 1.0 - 0.01*log->alive_steps);
   env->log.episode_return += log->episode_return;
   env->log.score += log->score;
-  env->log.moves += log->moves;
-  env->log.food_nb += log->food_nb;
-  env->log.agents_alive += log->agents_alive;
+  env->log.moves += log->moves / log->alive_steps;
   env->log.alive_steps += log->alive_steps;
   env->log.n += 1;
 }
@@ -161,6 +156,7 @@ void c_close(CCpr *env) {
   free(env->interactive_food_agent_count);
   free_foodlist(env->foods);
   free(env->masks);
+  free(env->agent_logs);
 }
 
 void free_CCpr(CCpr *env) {
@@ -192,6 +188,7 @@ void reward_agent(CCpr *env, int agent_id, float reward) {
   //   return;
   // }
   env->rewards[agent_id] += reward;
+  env->agent_logs[agent_id].episode_return += reward;
 }
 
 void spawn_food(CCpr *env, int food_type) {
@@ -319,8 +316,9 @@ void add_hp(CCpr *env, int agent_id, float hp) {
   } else if (agent->hp <= 0) {
     agent->hp = 0;
     env->agent_logs[agent->id].score += LOG_SCORE_REWARD_DEATH;
-    env->rewards[agent->id] += REWARD_DEATH;
+    reward_agent(env, agent_id, REWARD_DEATH);
     env->terminals[agent->id] = 1;
+    add_log(env, &env->agent_logs[agent_id]);
   }
 }
 
@@ -396,10 +394,12 @@ void spawn_agent(CCpr *env, int i){
   }
   assert(env->grid[adr] == EMPTY);
   env->grid[adr] = get_agent_tile_from_id(agent->id);
+  env->agent_logs[i] = (Log){0};
 }
 void c_reset(CCpr *env) {
   env->tick = 0;
   memset(env->agent_logs, 0, env->num_agents * sizeof(Log));
+  env->log = (Log){0};
   env->foods->size = 0;
   memset(env->foods->indexes, 0, env->width * env->height * sizeof(int));
   // make_grid_from_scratch(env);
@@ -432,8 +432,6 @@ void reward_agents_near(CCpr *env, int food_index) {
       reward_agent(env, i, env->interactive_food_reward);
       env->agent_logs[i].score += LOG_SCORE_REWARD_MEDIUM;
       add_hp(env, i, HP_REWARD_FOOD_MEDIUM);
-      // add_log(env->log_buffer, env->log);
-      // memset(env->log, 0, sizeof(Log));
     }
   }
   remove_food(env, food_index);
@@ -444,7 +442,6 @@ void step_agent(CCpr *env, int i) {
   Agent *agent = &env->agents[i];
 
   int action = env->actions[i];
-  env->agent_logs[i].episode_length += 1;
 
   int dr = 0;
   int dc = 0;
@@ -481,13 +478,27 @@ void step_agent(CCpr *env, int i) {
   int tile = env->grid[next_grid_idx];
 
   // Anything above should be obstacle
+  // In this case the agent position does not change
+  // We still have some checks to perform
   if (tile >= INTERACTIVE_FOOD) {
     env->agent_logs[i].score += LOG_SCORE_REWARD_MOVE;
-    env->rewards[i] += env->reward_move;
+    reward_agent(env, i, env->reward_move);
     next_r = agent->r;
     next_c = agent->c;
     next_grid_idx = env->width * next_r + next_c;
     tile = env->grid[next_grid_idx];
+  }
+  switch (tile) {
+  case NORMAL_FOOD:
+    reward_agent(env, i, env->reward_food);
+    env->agent_logs[i].score += LOG_SCORE_REWARD_SMALL;
+    add_hp(env, i, HP_REWARD_FOOD_SMALL);
+    remove_food(env, next_grid_idx);
+    break;
+  case EMPTY:
+    env->agent_logs[i].score += LOG_SCORE_REWARD_MOVE;
+    reward_agent(env, i, env->reward_move);
+    break;
   }
 
   // Interactive food logic
@@ -512,23 +523,8 @@ void step_agent(CCpr *env, int i) {
     }
   }
 
-  switch (tile) {
-  case NORMAL_FOOD:
-    env->agent_logs[i].score += LOG_SCORE_REWARD_SMALL;
-    reward_agent(env, i, env->reward_food);
-    add_hp(env, i, HP_REWARD_FOOD_SMALL);
-    remove_food(env, next_grid_idx);
-    // add_log(env->log_buffer, env->log);
-    // memset(env->log, 0, sizeof(Log));
-    break;
-  case EMPTY:
-    env->agent_logs[i].score += LOG_SCORE_REWARD_MOVE;
-    env->rewards[i] = env->reward_move;
-    break;
-  }
-
+  // update the grid tiles values
   int agent_tile = get_agent_tile_from_id(agent->id);
-
   env->grid[prev_grid_idx] = EMPTY;
   env->grid[next_grid_idx] = agent_tile;
   agent->r = next_r;
@@ -551,9 +547,7 @@ void clear_agent(CCpr *env, int agent_id) {
 void c_step(CCpr *env) {
   env->tick++;
 
-  // memset(env->truncations, 0, env->num_agents * sizeof(unsigned char));
   memset(env->rewards, 0, env->num_agents * sizeof(float));
-  // memset(env->terminals, 0, env->num_agents * sizeof(unsigned char));
   memset(env->interactive_food_agent_count, 0,
          (env->width * env->height + 7) / 8);
 
@@ -573,12 +567,13 @@ void c_step(CCpr *env) {
   int alive_agents = 0;
   for (int i = 0; i < env->num_agents; i++) {
     if (env->agents[i].hp > 0) {
+      env->agent_logs[i].alive_steps += 1;
       alive_agents += 1;
       if (env->agents[i].hp < 20) {
-        env->rewards[i] += REWARD_20_HP;
+        reward_agent(env, i, REWARD_20_HP);
         env->agent_logs[i].score += REWARD_20_HP;
       } else if (env->agents[i].hp > 80) {
-        env->rewards[i] += REWARD_80_HP;
+        reward_agent(env, i, REWARD_80_HP);
         env->agent_logs[i].score += REWARD_80_HP;
       }
     } 
@@ -595,22 +590,15 @@ void c_step(CCpr *env) {
     env->agent_logs[i].moves /= alive_agents;
   }
   env->agent_logs[i].food_nb = env->foods->size;
-  env->agent_logs[i].agents_alive = alive_agents;
   env->agent_logs[i].alive_steps = env->tick;
   */
+  env->log.food_nb = env->foods->size;
   compute_observations(env);
-  
-  if (alive_agents == 0|| env->tick > 1000) {
+  if (alive_agents == 0 || env->tick > 1000) {
     c_reset(env);
     if (alive_agents == 0) {
       memset(env->terminals, 1, env->num_agents * sizeof(unsigned char)); 
-    } else {
-      //memset(env->truncations, 1, env->num_agents * sizeof(unsigned char));
     }
-  }
-  for (int i = 0; i < env->num_agents; i++) {
-      add_log(env, &env->agent_logs[i]);
-      env->agent_logs[i] = (Log){0};
   }
 }
 

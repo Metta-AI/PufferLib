@@ -9,6 +9,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <float.h>
+#include <assert.h>
 #include "raylib.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -73,6 +74,7 @@ float randi(int min, int max) {
 typedef struct {
     float perf;
     float score;
+    float collision_rate;
     float episode_return;
     float episode_length;
     float n;
@@ -100,16 +102,13 @@ typedef struct {
     float vy;
     float vz;
     float speed;
-    float pitch;
-    float roll;
     float health;
     float max_turn;
     float max_speed;
     float attack_damage;
     float attack_range;
     Quaternion orientation;
-    float yaw;
-    int item;
+    int army;
     int unit;
     int target;
     int episode_length;
@@ -120,7 +119,7 @@ typedef struct {
     Log log;
     Client* client;
     Entity* agents;
-    Entity* factories;
+    Entity* bases;
     float* observations;
     int* actions;
     float* rewards;
@@ -133,8 +132,7 @@ typedef struct {
     int terrain_width;
     int terrain_height;
     int num_agents;
-    int num_factories;
-    int num_resources;
+    int num_armies;
     float* terrain;
 } School;
 
@@ -198,11 +196,11 @@ void perlin_noise(float* map, int width, int height,
 
 void init(School* env) {
     env->agents = calloc(env->num_agents, sizeof(Entity));
-    env->factories = calloc(env->num_factories, sizeof(Entity));
+    env->bases = calloc(env->num_armies, sizeof(Entity));
     env->terrain_width = 256*env->size_x;
     env->terrain_height = 256*env->size_z;
     env->terrain = calloc(env->terrain_width*env->terrain_height, sizeof(float));
-    perlin_noise(env->terrain, env->terrain_width, env->terrain_height, 1.0/2048.0, 8, 0, 0, 128);
+    perlin_noise(env->terrain, env->terrain_width, env->terrain_height, 1.0/2048.0, 8, 0, 0, 256);
 }
 
 void update_abilities(Entity* agent) {
@@ -251,15 +249,13 @@ void update_abilities(Entity* agent) {
     }
 }
 
-void respawn(School* env, Entity* agent) {
-    //agent->x = randf(-env->size_x, env->size_x);
-    //agent->y = randf(-env->size_y, env->size_y);
-    //agent->z = randf(-env->size_z, env->size_z);
-    int team = agent->item;
+void respawn(School* env, int idx) {
+    Entity* agent = &env->agents[idx];
+    int army = agent->army;
     agent->orientation = QuaternionIdentity();
-    if (agent->unit != MOTHERSHIP) {
-        int agents_per_team = env->num_agents / env->num_resources;
-        int team_mothership_idx = team*agents_per_team;
+
+    if (agent->unit == DRONE) {
+        int team_mothership_idx = 64*(idx / 64); // Hardcoded per army
         agent->x = env->agents[team_mothership_idx].x;
         agent->y = env->agents[team_mothership_idx].y;
         agent->z = env->agents[team_mothership_idx].z;
@@ -268,6 +264,19 @@ void respawn(School* env, Entity* agent) {
         }
         return;
     }
+
+    Entity* base = &env->bases[army];
+    agent->x = base->x;
+    agent->z = base->z;
+    float height = ground_height(env, agent->x, agent->z);
+    if (agent->unit == INFANTRY || agent->unit == TANK || agent->unit == ARTILLERY) {
+        agent->y = height;
+    } else {
+        agent->y = clampf(height + 0.2f, -env->size_y, env->size_y);
+    }
+
+    return;
+
 
     // Find farthest corner to spawn in
     float dists[8];
@@ -290,8 +299,8 @@ void respawn(School* env, Entity* agent) {
     // Distance of each corner to nearest opponent
     for (int i=0; i<env->num_agents; i++) {
         Entity* other = &env->agents[i];
-        int other_team = other->item;
-        if (other_team == team) {
+        int other_army = other->army;
+        if (other_army == army) {
             continue;
         }
         for (int j=0; j<4; j++) {
@@ -317,30 +326,6 @@ void respawn(School* env, Entity* agent) {
     agent->x = xx[max_idx];
     agent->y = yy[max_idx];
     agent->z = zz[max_idx];
-
-    //agent->x = (rand() % 2 == 0) ? -env->size_x : env->size_x;
-    //agent->y = (rand() % 2 == 0) ? -env->size_y : env->size_y;
-    //agent->z = (rand() % 2 == 0) ? -env->size_z : env->size_z;
-
-    /*
-    if (agent->item == 0) {
-        agent->x = -env->size_x;
-        agent->y = 0.0f;
-        agent->z = 0.0f;
-    } else if (agent->item == 1) {
-        agent->x = env->size_x;
-        agent->y = 0.0f;
-        agent->z = 0.0f;
-    } else if (agent->item == 2) {
-        agent->x = 0.0f;
-        agent->y = 0.0f;
-        agent->z = -env->size_z;
-    } else if (agent->item == 3) {
-        agent->x = 0.0f;
-        agent->y = 0.0f;
-        agent->z = env->size_z;
-    }
-    */
 }
 
 
@@ -381,6 +366,9 @@ bool attack_ground(Entity *agent, Entity *target) {
         return false;
     }
     if (target->unit == BOMBER) {
+        return false;
+    }
+    if (target->unit == DRONE) {
         return false;
     }
 
@@ -581,20 +569,34 @@ void move_ship(School* env, Entity* agent, int* actions, int i) {
 }
 
 void compute_observations(School* env) {
+    float centroids[env->num_armies][3];
+    memset(centroids, 0, env->num_armies*3*sizeof(float));
+
+    for (int i=0; i<env->num_agents; i++) {
+        int army = env->agents[i].army;
+        centroids[army][0] += env->num_armies * env->agents[i].x / env->num_agents;
+        centroids[army][1] += env->num_armies * env->agents[i].y / env->num_agents;
+        centroids[army][2] += env->num_armies * env->agents[i].z / env->num_agents;
+    }
+
     int obs_idx = 0;
     for (int a=0; a<env->num_agents; a++) {
+        assert(obs_idx == a*(6*env->num_armies + 19 + 8));
+
+        // Distance to each base
         Entity* agent = &env->agents[a];
-        float dists[env->num_resources];
-        for (int i=0; i<env->num_resources; i++) {
+        int team = agent->army;
+        float dists[env->num_armies];
+        for (int i=0; i<env->num_armies; i++) {
             dists[i] = 999999;
         }
-        for (int f=0; f<env->num_factories; f++) {
-            Entity* factory = &env->factories[f];
-            float dx = factory->x - agent->x;
-            float dy = factory->y - agent->y;
-            float dz = factory->z - agent->z;
+        for (int f=0; f<env->num_armies; f++) {
+            Entity* base = &env->bases[f];
+            float dx = base->x - agent->x;
+            float dy = base->y - agent->y;
+            float dz = base->z - agent->z;
             float dd = dx*dx + dy*dy + dz*dz;
-            int type = f % env->num_resources;
+            int type = f % env->num_armies;
             if (dd < dists[type]) {
                 dists[type] = dd;
                 env->observations[obs_idx + 3*type] = dx;
@@ -602,81 +604,103 @@ void compute_observations(School* env) {
                 env->observations[obs_idx + 3*type + 2] = dz;
             }
         }
-        obs_idx += 3*env->num_resources;
+        obs_idx += 3*env->num_armies;
+
+
+        // Distance to each centroid, own team first
+        env->observations[obs_idx++] = agent->x - centroids[team][0];
+        env->observations[obs_idx++] = agent->y - centroids[team][1];
+        env->observations[obs_idx++] = agent->z - centroids[team][2];
+        for (int i=0; i<env->num_armies; i++) {
+            if (i == team) {
+                continue;
+            }
+            env->observations[obs_idx++] = agent->x - centroids[i][0];
+            env->observations[obs_idx++] = agent->y - centroids[i][1];
+            env->observations[obs_idx++] = agent->z - centroids[i][2];
+        }
+
+        // Individual agent stats
         env->observations[obs_idx++] = agent->vx/MAX_SPEED;
         env->observations[obs_idx++] = agent->vy/MAX_SPEED;
         env->observations[obs_idx++] = agent->vz/MAX_SPEED;
-        env->observations[obs_idx++] = agent->yaw;
-        env->observations[obs_idx++] = agent->pitch;
-        env->observations[obs_idx++] = agent->roll;
+        env->observations[obs_idx++] = agent->orientation.w;
+        env->observations[obs_idx++] = agent->orientation.x;
+        env->observations[obs_idx++] = agent->orientation.y;
+        env->observations[obs_idx++] = agent->orientation.z;
         env->observations[obs_idx++] = agent->x;
         env->observations[obs_idx++] = agent->y;
         env->observations[obs_idx++] = agent->z;
+        env->observations[obs_idx++] = agent->y - ground_height(env, agent->x, agent->z);
+        env->observations[obs_idx++] = agent->speed;
+        env->observations[obs_idx++] = agent->health;
+        env->observations[obs_idx++] = agent->max_turn;
+        env->observations[obs_idx++] = agent->max_speed;
+        env->observations[obs_idx++] = agent->attack_damage;
+        env->observations[obs_idx++] = agent->attack_range;
         env->observations[obs_idx++] = env->rewards[a];
+        env->observations[obs_idx++] = env->terminals[a];
 
-        float min_dist = 999999;
-        int min_idx = 0;
-        for (int j=0; j<env->num_agents; j++) {
-            if (j == a) {
-                continue;
-            }
-            Entity* agent = &env->agents[j];
-            float dx = agent->x - agent->x;
-            float dy = agent->y - agent->y;
-            float dz = agent->z - agent->z;
-            float dd = dx*dx + dy*dy + dz*dz;
-            if (dd < min_dist) {
-                min_dist = dd;
-                min_idx = j;
-            }
-        }
-        Entity* other = &env->agents[min_idx];
-        env->observations[obs_idx++] = agent->x - other->x;
-        env->observations[obs_idx++] = agent->y - other->y;
-        env->observations[obs_idx++] = agent->z - other->z;
-        env->observations[obs_idx++] = (float)(agent->item == other->item);
-        memset(&env->observations[obs_idx], 0, env->num_resources*sizeof(float));
-        env->observations[obs_idx + agent->item] = 1.0f;
-        obs_idx += env->num_resources;
+        // Hardcoded 8 unit types
+        memset(&env->observations[obs_idx], 0, 8*sizeof(float));
+        env->observations[obs_idx + agent->unit] = 1.0f;
+        obs_idx += 8;
     }
 }
 
 // Required function
 void c_reset(School* env) {
-    int agents_per_team = env->num_agents / env->num_resources;
-    for (int team=0; team<env->num_resources; team++) {
-        for (int i=0; i<agents_per_team; i++) {
-            Entity* agent = &env->agents[team*agents_per_team + i];
-            if (i == 0) {
+    int agents_per_army = env->num_agents / env->num_armies;
+    for (int i=0; i<env->num_armies; i++) {
+        bool spawn = false;
+        Entity* base = &env->bases[i];
+        while (!spawn) {
+            base->x = randf(0.5 - env->size_x, env->size_x - 0.5);
+            base->z = randf(0.5 - env->size_z, env->size_z - 0.5);
+            base->y = ground_height(env, base->x, base->z);
+            base->army = i;
+            spawn = true;
+
+            for (int j=0; j<i; j++) {
+                Entity* other = &env->bases[j];
+                float dx = other->x - base->x;
+                float dz = other->z - base->z;
+                float dd = sqrtf(dx*dx + dz*dz);
+                if (dd < 2.0f) {
+                    spawn = false;
+                    break;
+                }
+            }
+        }
+    }
+
+    for (int army=0; army<env->num_armies; army++) {
+        for (int i=0; i<agents_per_army; i++) {
+            int idx = army*agents_per_army + i;
+            Entity* agent = &env->agents[idx];
+            if (i % 64 == 0) {
                 agent->unit = MOTHERSHIP;
-            } else if (i % 32 <= 4) {
+            } else if (i % 64 <= 4) {
                 agent->unit = TANK;
-            } else if (i % 32 <= 8) {
+            } else if (i % 64 <= 6) {
                 agent->unit = ARTILLERY;
-            } else if (i % 32 <= 12) {
+            } else if (i % 64 <= 10) {
                 agent->unit = BOMBER;
-            } else if (i % 32 <= 16) {
+            } else if (i % 64 <= 14) {
                 agent->unit = FIGHTER;
-            } else if (i % 32 <= 26) {
+            } else if (i % 64 <= 32) {
                 agent->unit = INFANTRY;
             } else {
                 agent->unit = DRONE;
             }
 
-            agent->item = team;
+            agent->army = army;
             agent->orientation = QuaternionIdentity();
             agent->episode_length = 0;
             agent->target = -1;
             update_abilities(agent);
-            respawn(env, agent);
+            respawn(env, idx);
         }
-    }
-    for (int i=0; i<env->num_factories; i++) {
-        Entity* factory = &env->factories[i];
-        factory->x = randf(-env->size_x, env->size_x);
-        factory->y = randf(-env->size_y, env->size_y);
-        factory->z = randf(-env->size_z, env->size_z);
-        factory->item = i % env->num_resources;
     }
     compute_observations(env);
 }
@@ -690,29 +714,35 @@ void c_step(School* env) {
         agent->episode_length += 1;
         agent->target = -1;
 
+        bool done = false;
+        float collision = 0.0f;
+        float reward = 0.0f;
         if (agent->health <= 0) {
-            agent->health = 1.0f;
-            respawn(env, agent);
-
-            env->log.episode_length += agent->episode_length;
-            env->log.episode_return += agent->episode_return;
-            env->log.n++;
-            agent->episode_length = 0;
-            agent->episode_return = 0;
+            done = true;
+            reward = 0.0f;
         } else if (agent->unit == DRONE || agent->unit == FIGHTER || agent->unit == BOMBER || agent->unit == MOTHERSHIP) {
             // Crash into terrain
             float terrain_height = ground_height(env, agent->x, agent->z);
             if (agent->y < terrain_height) {
-                agent->health = 1.0f;
-                env->rewards[i] -= 1.0f;
-                agent->episode_return -= 1.0f;
-                respawn(env, agent);
-                env->log.episode_length += agent->episode_length;
-                env->log.episode_return += agent->episode_return;
-                env->log.n++;
-                agent->episode_length = 0;
-                agent->episode_return = 0;
+                collision = 1.0f;
+                done = true;
+                reward = -1.0f;
             }
+        }
+
+        if (done) {
+            update_abilities(agent);
+            respawn(env, i);
+            agent->episode_return += reward;
+            env->rewards[i] = reward;
+            env->terminals[i] = 1;
+            env->log.score = (1.0f - collision) * env->log.episode_return;
+            env->log.episode_length += agent->episode_length;
+            env->log.episode_return += agent->episode_return;
+            env->log.collision_rate += collision;
+            env->log.n++;
+            agent->episode_length = 0;
+            agent->episode_return = 0;
         }
 
         //move_basic(env, agent, env->actions + 3*i);
@@ -721,106 +751,8 @@ void c_step(School* env) {
         } else {
             move_ship(env, agent, env->actions + 3*i, i);
         }
-
-        if (rand() % env->num_agents == 0) {
-            respawn(env, &env->agents[i]);
-        }
-
-        // Collision penalty
-        /*
-        float penalty = 0.0f;
-        float same_color_dist = 999999;
-        float diff_color_dist = 999999;
-        for (int j=0; j<env->num_agents; j++) {
-            if (j == i) {
-                continue;
-            }
-            Entity* other = &env->agents[j];
-            float dx = other->x - agent->x;
-            float dy = other->y - agent->y;
-            float dz = other->z - agent->z;
-            float dd = dx*dx + dy*dy + dz*dz;
-            if (other->item == agent->item && dd < same_color_dist) {
-                same_color_dist = dd;
-            } else if (other->item != agent->item && dd < diff_color_dist) {
-                diff_color_dist = dd;
-            }
-        }
-        if (agent->item == 0 && diff_color_dist < same_color_dist) {
-            env->rewards[i] -= 0.5f;
-        } else if (agent->item == 1 && diff_color_dist < same_color_dist) {
-            env->rewards[i] += 0.5f;
-        }
-        */
-
-
-        // Distance penalty
-        /*
-        float dist = (agent->x*agent->x + agent->y*agent->y + agent->z*agent->z);
-        if (dist > 0.25 && dist < 0.35) {
-            env->rewards[i] += 1.0f;
-            agent->episode_return += env->rewards[i];
-        }
-        */
-
-        //env->rewards[i] -= penalty;
-        //agent->episode_return += env->rewards[i];
-        /*
-        if (agent->episode_length > 256) {
-            env->log.perf += 1.0f;
-            env->log.score += 1.0f;
-            env->log.episode_length += agent->episode_length;
-            env->log.episode_return += agent->episode_return;
-            env->log.n++;
-            //env->rewards[i] += 1.0f;
-            agent->episode_length = 0;
-            agent->episode_return = 0;
-        }
-        */
-
-        // Target seeking reward
-        /*
-        for (int f=0; f<env->num_factories; f++) {
-            Entity* factory = &env->factories[f];
-            float dx = (factory->x - agent->x);
-            float dy = (factory->y - agent->y);
-            float dz = (factory->z - agent->z);
-            float dist = sqrt(dx*dx + dy*dy + dz*dz);
-            if (dist > 0.1) {
-                continue;
-            }
-            if (factory->item == agent->item) {
-                agent->item = (agent->item + 1) % env->num_resources;
-                update_abilities(agent);
-                env->log.perf += 1.0f;
-                env->log.score += 1.0f;
-                env->log.episode_length += agent->episode_length;
-                env->log.n++;
-                env->rewards[i] += 1.0f;
-                agent->episode_length = 0;
-            }
-        }
-        */
     }
-    for (int f=0; f<env->num_factories; f++) {
-        Entity* factory = &env->factories[f];
-        factory->x += factory->vx;
-        factory->y += factory->vy;
-        factory->z += factory->vz;
 
-        float factory_x = clip(factory->x, -env->size_x, env->size_x);
-        float factory_y = clip(factory->y, -env->size_y, env->size_y);
-        float factory_z = clip(factory->z, -env->size_z, env->size_z);
-
-        if (factory_x != factory->x || factory_y != factory->y || factory_z != factory->z) {
-            factory->vx = randf(-MAX_FACTORY_SPEED, MAX_FACTORY_SPEED);
-            factory->vy = randf(-MAX_FACTORY_SPEED, MAX_FACTORY_SPEED);
-            factory->vz = randf(-MAX_FACTORY_SPEED, MAX_FACTORY_SPEED);
-            factory->x = factory_x;
-            factory->y = factory_y;
-            factory->z = factory_z;
-        }
-    }
     for (int i=0; i<env->num_agents; i++) {
         Entity* agent = &env->agents[i];
         for (int j=0; j<env->num_agents; j++) {
@@ -828,7 +760,7 @@ void c_step(School* env) {
                 continue;
             }
             Entity* target = &env->agents[j];
-            if (agent->item == target->item) {
+            if (agent->army == target->army) {
                 continue;
             }
             bool can_attack = false;
@@ -845,14 +777,16 @@ void c_step(School* env) {
                 continue;
             }
             agent->target = j;
-            env->rewards[i] += 0.25f;
-            agent->episode_return += 0.25f;
-            //env->rewards[j] -= 0.25f;
+            env->rewards[i] += 1.0f;
+            agent->episode_return += 1.0f;
             target->health -= agent->attack_damage;
             break;
         }
     }
 
+    if (rand() % 9000 == 0) {
+        c_reset(env);
+    }
 
     compute_observations(env);
 }
@@ -1095,10 +1029,10 @@ void c_render(School* env) {
         //EndShaderMode();
 
 
-        for (int f=0; f<env->num_factories; f++) {
-            Entity* factory = &env->factories[f];
-            float y = ground_height(env, factory->x, factory->z);
-            DrawModel(client->models[BASE], (Vector3){factory->x, y, factory->z}, 0.05f, COLORS[factory->item]);
+        for (int f=0; f<env->num_armies; f++) {
+            Entity* base = &env->bases[f];
+            float y = ground_height(env, base->x, base->z);
+            DrawModel(client->models[BASE], (Vector3){base->x, y, base->z}, 0.05f, COLORS[base->army]);
         }
 
         for (int i=0; i<env->num_agents; i++) {
@@ -1110,7 +1044,23 @@ void c_render(School* env) {
             model.transform = transform;
 
             Vector3 scale = (Vector3){0.01f, 0.01f, 0.01f};
-            Color color = COLORS[agent->item];
+            if (agent->unit == DRONE) {
+                scale = (Vector3){0.01f, 0.01f, 0.01f};
+            } else if (agent->unit == MOTHERSHIP) {
+                scale = (Vector3){0.03f, 0.03f, 0.03f};
+            } else if (agent->unit == FIGHTER) {
+                scale = (Vector3){0.015f, 0.015f, 0.015f};
+            } else if (agent->unit == BOMBER) {
+                scale = (Vector3){0.015f, 0.015f, 0.015f};
+            } else if (agent->unit == INFANTRY) {
+                scale = (Vector3){0.005f, 0.005f, 0.005f};
+            } else if (agent->unit == TANK) {
+                scale = (Vector3){0.01f, 0.01f, 0.01f};
+            } else if (agent->unit == ARTILLERY) {
+                scale = (Vector3){0.02f, 0.02f, 0.02f};
+            }
+
+            Color color = COLORS[agent->army];
             Vector3 rot = {0.0f, 1.0f, 0.0f};
             DrawModelEx(model, pos, rot, 0, scale, color);
 
@@ -1119,7 +1069,7 @@ void c_render(School* env) {
                 DrawLine3D(
                     (Vector3){agent->x, agent->y, agent->z},
                     (Vector3){target->x, target->y, target->z},
-                    COLORS[agent->item]
+                    COLORS[agent->army]
                 );
             }
         }
@@ -1138,7 +1088,7 @@ void c_render(School* env) {
 // Do not free env->observations, actions, rewards, terminals
 void c_close(School* env) {
     free(env->agents);
-    free(env->factories);
+    free(env->bases);
     if (env->client != NULL) {
         Client* client = env->client;
         //UnloadTexture(client->sprites);

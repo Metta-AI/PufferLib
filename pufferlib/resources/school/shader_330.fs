@@ -82,7 +82,7 @@ float rand(vec2 co){
 void main()
 {
     // Color based on height (e.g., gradient from blue to red)
-    float height = fragPosition.y/128.0;
+    float height = fragPosition.y/256.0;
     float delta = 0.0;
     for (int i = -4; i < 4; i++) {
         float scale = pow(2.0, float(i));
