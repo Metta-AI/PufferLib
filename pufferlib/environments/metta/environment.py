@@ -52,52 +52,19 @@ def oc_divide(a, b):
         return int(result)
     return result
 
-class FlattenedDiscrete(gymnasium.spaces.Discrete):
-    def __init__(self, n, original_nvec, seed=None):
-        super().__init__(n, seed=seed)
-        self._original_nvec = np.array(original_nvec, dtype=np.int64)
-    
-    @property
-    def nvec(self):
-        """Provide nvec for backward compatibility with MettaGrid validation."""
-        return self._original_nvec
 class MettaPuff(MettaGridEnv):
     def __init__(self, config, render_mode='human', buf=None, seed=0):
         super().__init__(config, render_mode=render_mode, buf=buf)
-        
-        # Build flattened action mapping
-        self._build_action_mapping()
         self.action_space = pufferlib.spaces.joint_space(self.single_action_space, self.num_agents)
         self.actions = self.actions.astype(np.int32)
-    
-    def _build_action_mapping(self):
-        self.arg_counts = [max_arg + 1 for max_arg in self.max_action_args]
-        self.n_actions = sum(self.arg_counts)
-        self.action_map = np.zeros((self.n_actions, 2), dtype=np.int32)
-        
-        i = 0
-        for action_type, (action_name, arg_count) in enumerate(zip(self.action_names, self.arg_counts)):
-            for arg in range(arg_count):
-                self.action_map[i] = (action_type, arg)
-                i += 1
-    
+
     @property
     def single_action_space(self):
-        """Return flattened single action space for PufferLib."""
-        if hasattr(self, 'n_actions'):
-            # Create FlattenedDiscrete with original nvec for compatibility
-            original_nvec = [len(self.action_names)] + self.max_action_args
-            return FlattenedDiscrete(self.n_actions, original_nvec)
-        return super().single_action_space
-    
+        return gymnasium.spaces.MultiDiscrete(super().single_action_space.nvec, dtype=np.int32)
+
     def step(self, actions):
-        actions = np.asarray(actions, dtype=np.int32)
-        
-        unflattened_actions = np.array([
-            self.action_map[a] for a in actions
-        ], dtype=np.int32)
-        
-        obs, rew, term, trunc, info = super().step(unflattened_actions)
+        obs, rew, term, trunc, info = super().step(actions)
+
         if all(term) or all(trunc):
             self.reset()
             if 'agent_raw' in info:
@@ -107,5 +74,5 @@ class MettaPuff(MettaGridEnv):
 
         else:
             info = []
- 
+
         return obs, rew, term, trunc, [info]
