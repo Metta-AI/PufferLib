@@ -36,7 +36,7 @@ from torch.utils.cpp_extension import (
 )
 
 
-VERSION = "2.0.6"
+VERSION = "3.0.0"
 
 # Build with DEBUG=1 to enable debug symbols
 DEBUG = os.getenv("DEBUG", "0") == "1"
@@ -144,9 +144,9 @@ else:
 # - <= 0.20 is missing dict methods for gym.spaces.Dict
 # - 0.18-0.21 require setuptools<=65.5.0
 
-GYMNASIUM_VERSION = '0.29.1'
-GYM_VERSION = '0.23'
-PETTINGZOO_VERSION = '1.24.1'
+GYMNASIUM_VERSION = '1.1.1'
+GYM_VERSION = '0.26.2'
+PETTINGZOO_VERSION = '1.25.0'
 
 environments = {
     'avalon': [
@@ -392,23 +392,23 @@ extension_kwargs = dict(
 # Put C env names here. PufferLib will look for
 # pufferlib/ocean/<name>/binding.c
 c_extensions_names = [
-    'gpudrive',
-    'squared',
-    'pong',
-    'boids',
-    'breakout',
-    'enduro',
-    'blastar',
-    'grid',
-    'nmmo3',
-    'tactical',
-    'connect4',
-    'go',
-    'cartpole'
+#    'gpudrive',
+#    'squared',
+#    'pong',
+#    'boids',
+#    'breakout',
+#    'enduro',
+#    'blastar',
+#    'grid',
+#    'nmmo3',
+#    'tactical',
+#    'connect4',
+#    'go',
+#    'cartpole'
 ]
 
 # TODO: Include other C files so rebuild is auto?
-c_extension_paths = glob.glob('pufferlib/ocean/**/binding.c', recursive=True)
+c_extension_paths = [] #glob.glob('pufferlib/ocean/**/binding.c', recursive=True)
 c_extensions = [
     Extension(
         path.rstrip('.c').replace('/', '.'),
@@ -466,7 +466,7 @@ setup(
     include_package_data=True,
     install_requires=[
         'numpy',
-        'opencv-python==3.4.17.63',
+        'opencv-python==4.11.0.86',
         'rich',
         'rich_argparse',
         f'gym<={GYM_VERSION}',
