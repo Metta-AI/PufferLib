@@ -48,6 +48,8 @@ rich.traceback.install(show_locals=False)
 import signal # Aggressively exit on ctrl+c
 signal.signal(signal.SIGINT, lambda sig, frame: os._exit(0))
 
+# Assume advantage kernel has been built if CUDA compiler is available
+ADVANTAGE_CUDA = shutil.which("nvcc") is not None
 
 class PuffeRL:
     def __init__(self, config, vecenv, policy, logger=None):
@@ -330,8 +332,7 @@ class PuffeRL:
 
             shape = self.values.shape
             advantages = torch.zeros(shape, device=device)
-            # TODO: robustify
-            torch.ops.pufferlib.compute_puff_advantage(self.values, self.rewards,
+            advantages = compute_puff_advantage(self.values, self.rewards,
                 self.terminals, self.ratio, advantages, config['gamma'],
                 config['gae_lambda'], config['vtrace_rho_clip'], config['vtrace_c_clip'])
 
@@ -371,7 +372,7 @@ class PuffeRL:
             newlogprob = newlogprob.reshape(mb_logprobs.shape)
             logratio = newlogprob - mb_logprobs
             ratio = logratio.exp()
-            self.ratio[idx] = ratio # TODO: Experiment with this
+            self.ratio[idx] = ratio.detach() # TODO: Experiment with this
 
             # TODO: Only do this if we are KL clipping? Saves 1-2% compute
             with torch.no_grad():
@@ -381,7 +382,7 @@ class PuffeRL:
 
             # TODO: Do you need to do this? Policy hasn't changed
             adv = advantages[idx]
-            torch.ops.pufferlib.compute_puff_advantage(mb_values, mb_rewards, mb_terminals,
+            adv = compute_puff_advantage(mb_values, mb_rewards, mb_terminals,
                 ratio, adv, config['gamma'], config['gae_lambda'],
                 config['vtrace_rho_clip'], config['vtrace_c_clip'])
             adv = mb_advantages
@@ -637,6 +638,29 @@ class PuffeRL:
 
         print('\033[0;0H' + capture.get())
 
+def compute_puff_advantage(values, rewards, terminals,
+        ratio, advantages, gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip):
+    '''CUDA kernel for puffer advantage with automatic CPU fallback. You need
+    nvcc (in cuda-dev-tools or in a cuda-dev docker base) for PufferLib to
+    compile the fast version.'''
+
+    device = values.device
+    if not ADVANTAGE_CUDA:
+        values = values.cpu()
+        rewards = rewards.cpu()
+        terminals = terminals.cpu()
+        ratio = ratio.cpu()
+        advantages = advantages.cpu()
+
+    torch.ops.pufferlib.compute_puff_advantage(values, rewards, terminals,
+        ratio, advantages, gamma, gae_lambda, vtrace_rho_clip, vtrace_c_clip)
+
+    if not ADVANTAGE_CUDA:
+        return advantages.to(device)
+
+    return advantages
+
+
 def abbreviate(num, b2, c2):
     if num < 1e3:
         return str(num)
@@ -754,9 +778,12 @@ class Utilization(Thread):
     def stop(self):
         self.stopped = True
 
-def downsample_alt(arr, m):
+def downsample(arr, m):
     if len(arr) < m:
         return arr
+
+    if m == 0:
+        return [arr[-1]]
 
     orig_arr = arr
     last = arr[-1]
@@ -968,6 +995,7 @@ def sweep(args=None, env_name=None):
         raise pufferlib.APIUsageError(f'Invalid sweep method {method}. See pufferlib.sweep')
 
     sweep = sweep_cls(args['sweep'])
+    points_per_run = args['sweep']['downsample']
     target_key = f'environment/{args["sweep"]["metric"]}'
     for i in range(args['max_runs']):
         seed = time.time_ns() & 0xFFFFFFFF
@@ -978,9 +1006,9 @@ def sweep(args=None, env_name=None):
         total_timesteps = args['train']['total_timesteps']
         all_logs = train(env_name, args=args)
         all_logs = [e for e in all_logs if target_key in e]
-        scores = downsample_alt([log[target_key] for log in all_logs], 10)
-        costs = downsample_alt([log['uptime'] for log in all_logs], 10)
-        timesteps = downsample_alt([log['agent_steps'] for log in all_logs], 10)
+        scores = downsample([log[target_key] for log in all_logs], points_per_run)
+        costs = downsample([log['uptime'] for log in all_logs], points_per_run)
+        timesteps = downsample([log['agent_steps'] for log in all_logs], points_per_run)
         for score, cost, timestep in zip(scores, costs, timesteps):
             args['train']['total_timesteps'] = timestep
             sweep.observe(args, score, cost)
