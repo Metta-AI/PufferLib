@@ -122,6 +122,7 @@ MAKE_FUNCTIONS = {
     'convert': 'Convert',
     'pong': 'Pong',
     'enduro': 'Enduro',
+    'tetris': 'Tetris',
     'cartpole': 'Cartpole',
     'moba': 'Moba',
     'boids': 'Boids',

@@ -177,35 +177,14 @@ class Terraform(nn.Module):
 
 
 class Snake(nn.Module):
-    def __init__(self, env, cnn_channels=32, hidden_size=128,
-            use_p3o=False, p3o_horizon=32, use_diayn=False, diayn_skills=8, **kwargs):
+    def __init__(self, env, cnn_channels=32, hidden_size=128):
         super().__init__()
         self.hidden_size = hidden_size
         self.is_continuous = False
-        self.use_diayn = use_diayn
 
         encode_dim = cnn_channels
-        if use_diayn:
-            encode_dim += diayn_skills
-            self.diayn_skills = diayn_skills
-            '''
-            self.diayn_discriminator = nn.Sequential(
-                pufferlib.pytorch.layer_init(
-                    nn.Conv2d(64, cnn_channels, 5, stride=3)),
-                nn.ReLU(),
-                pufferlib.pytorch.layer_init(
-                    nn.Conv2d(cnn_channels, cnn_channels, 3, stride=1)),
-                nn.ReLU(),
-                nn.Flatten(),
-                pufferlib.pytorch.layer_init(nn.Linear(cnn_channels, diayn_skills)),
-            )
-            '''
-            self.diayn_discriminator = nn.Sequential(
-                pufferlib.pytorch.layer_init(nn.Linear(64*env.single_action_space.n, hidden_size)),
-                nn.ReLU(),
-                pufferlib.pytorch.layer_init(nn.Linear(hidden_size, diayn_skills)),
-            )
- 
+
+        '''
         self.network= nn.Sequential(
             pufferlib.pytorch.layer_init(
                 nn.Conv2d(8, cnn_channels, 5, stride=3)),
@@ -219,26 +198,19 @@ class Snake(nn.Module):
             pufferlib.pytorch.layer_init(nn.Linear(encode_dim, hidden_size)),
             nn.ReLU(),
         )
-        self.actor = pufferlib.pytorch.layer_init(
+ 
+        '''
+        self.encoder= torch.nn.Sequential(
+            nn.Linear(8*np.prod(env.single_observation_space.shape), hidden_size),
+            nn.GELU(),
+        )
+        self.decoder = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
-
-        self.use_p3o = use_p3o
-        self.p3o_horizon = p3o_horizon
-        if use_p3o:
-            self.value_mean = pufferlib.pytorch.layer_init(
-                nn.Linear(hidden_size, p3o_horizon), std=1)
-            self.value_logstd = nn.Parameter(torch.zeros(1, p3o_horizon))
-        else:
-            self.value = pufferlib.pytorch.layer_init(
-                nn.Linear(hidden_size, 1), std=1)
-
-    def discrim_forward(self, obs):
-        #obs = F.one_hot(obs.long(), 8).permute(0, 1, 4, 2, 3).float()
-        #B, f, c, h, w = obs.shape
-        #obs = obs.reshape(B, f*c, h, w)
-        return self.diayn_discriminator(obs)
+        self.value = pufferlib.pytorch.layer_init(
+            nn.Linear(hidden_size, 1), std=1)
 
     def forward(self, observations, state=None):
+        #observations = F.one_hot(observations.long(), 8).permute(0, 3, 1, 2).float()
         hidden = self.encode_observations(observations)
         actions, value = self.decode_actions(hidden)
         return actions, value
@@ -247,25 +219,23 @@ class Snake(nn.Module):
         return self.forward(x, state)
 
     def encode_observations(self, observations, state=None):
-        observations = F.one_hot(observations.long(), 8).permute(0, 3, 1, 2).float()
-        hidden = self.network(observations)
-
-        if self.use_diayn:
-            z_one_hot = F.one_hot(state.diayn_z, self.diayn_skills).float()
-            hidden = torch.cat([hidden, z_one_hot], dim=1)
-
-        return self.proj(hidden)
+        observations = F.one_hot(observations.long(), 8).view(-1, 11*11*8).float()
+        return self.encoder(observations)
 
     def decode_actions(self, hidden):
-        action = self.actor(hidden)
+        action = self.decoder(hidden)
+        value = self.value(hidden)
+        return action, value
 
-        if self.use_p3o:
-            value_mean = self.value_mean(hidden)
-            value_logstd = self.value_logstd.expand_as(value_mean)
-            return action, value_mean, value_logstd
-        else:
-            value = self.value(hidden)
-            return action, value
+'''
+class Snake(pufferlib.models.Default):
+    def __init__(self, env, hidden_size=128):
+        super().__init__()
+
+    def encode_observations(self, observations, state=None):
+        observations = F.one_hot(observations.long(), 8).view(-1, 11*11*8).float()
+        super().encode_observations(observations, state)
+'''
 
 class Grid(nn.Module):
     def __init__(self, env, cnn_channels=32, hidden_size=128, **kwargs):
@@ -477,7 +447,6 @@ class TrashPickup(nn.Module):
             nn.ReLU(),
             nn.Flatten(),
             pufferlib.pytorch.layer_init(nn.Linear(cnn_channels, hidden_size)),
-            nn.ReLU(),
         )
         self.actor = pufferlib.pytorch.layer_init(
             nn.Linear(hidden_size, env.single_action_space.n), std=0.01)
@@ -852,4 +821,79 @@ class GPUDrive(nn.Module):
         action = self.actor(flat_hidden)
         action = torch.split(action, self.atn_dim, dim=1)
         value = self.value_fn(flat_hidden)
+        return action, value
+
+class Tetris(nn.Module):
+    def __init__(
+        self, 
+        env, 
+        cnn_channels=32,
+        input_size=128,
+        hidden_size=128,
+        **kwargs
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.cnn_channels =  cnn_channels   
+        self.n_cols = env.n_cols
+        self.n_rows = env.n_rows
+        self.scalar_input_size = (6 + 7 * (env.deck_size + 1))
+        self.flat_conv_size = cnn_channels * 3 * 10
+        self.is_continuous = isinstance(env.single_action_space, pufferlib.spaces.Box)
+
+        self.conv_grid = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Conv2d(2, cnn_channels, kernel_size=(5, 3), stride=(2,1), padding=(2,1))),
+            nn.ReLU(),
+            pufferlib.pytorch.layer_init(nn.Conv2d(cnn_channels, cnn_channels, kernel_size=(5, 3), stride=(2,1), padding=(2,1))),
+            nn.ReLU(),
+            pufferlib.pytorch.layer_init(nn.Conv2d(cnn_channels, cnn_channels, kernel_size=(5, 5), stride=(2,1), padding=(2,2))),
+            nn.ReLU(),
+            nn.Flatten(),
+            pufferlib.pytorch.layer_init(nn.Linear(self.flat_conv_size, input_size)),
+        )
+
+        self.fc_scalar = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(self.scalar_input_size, input_size)),
+            nn.ReLU(),
+        )
+
+        self.proj = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(2 * input_size, hidden_size)),
+            nn.ReLU(),
+        )
+
+        self.actor = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(hidden_size, 7), std=0.01),
+            nn.Flatten()
+        )
+
+        self.value_fn = nn.Sequential(
+            pufferlib.pytorch.layer_init(nn.Linear(hidden_size, 1)),
+            nn.ReLU(),
+        )
+
+    def forward(self, observations, state=None):
+        hidden = self.encode_observations(observations) 
+        actions, value = self.decode_actions(hidden)
+        return actions, value
+
+    def forward_train(self, x, state=None):
+        return self.forward(x, state)
+
+    def encode_observations(self, observations, state=None):
+        B = observations.shape[0]
+        grid_info = observations[:, 0:(self.n_cols * self.n_rows)].view(B, self.n_rows, self.n_cols)  # (B, n_rows, n_cols)
+        grid_info = torch.stack([(grid_info == 1).float(), (grid_info == 2).float()], dim=1)  # (B, 2, n_rows, n_cols)
+        scalar_info = observations[:, (self.n_cols * self.n_rows):(self.n_cols * self.n_rows + self.scalar_input_size)].float()
+
+        grid_feat = self.conv_grid(grid_info)  # (B, input_size)
+        scalar_feat = self.fc_scalar(scalar_info)  # (B, input_size)
+
+        combined = torch.cat([grid_feat, scalar_feat], dim=-1)  # (B, 2 * input_size)
+        features = self.proj(combined)  # (B, hidden_size)
+        return features
+
+    def decode_actions(self, hidden):
+        action = self.actor(hidden)  # (B, 4 * n_cols)
+        value = self.value_fn(hidden)  # (B, 1)
         return action, value
