@@ -218,6 +218,11 @@ class PuffeRL:
         config = self.config
         device = config['device']
 
+        if config['use_rnn']:
+            for k in self.lstm_h:
+                self.lstm_h[k].zero_()
+                self.lstm_c[k].zero_()
+
         self.full_rows = 0
         while self.full_rows < self.segments:
             profile('env', epoch)
