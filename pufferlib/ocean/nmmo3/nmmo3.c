@@ -37,18 +37,18 @@ struct MMONet {
 
 MMONet* init_mmonet(Weights* weights, int num_agents) {
     MMONet* net = calloc(1, sizeof(MMONet));
-    int hidden = 256;
+    int hidden = 512;
     net->num_agents = num_agents;
     net->ob_map = calloc(num_agents*11*15*59, sizeof(float));
     net->ob_player_discrete = calloc(num_agents*47, sizeof(int));
     net->ob_player_continuous = calloc(num_agents*47, sizeof(float));
     net->ob_reward = calloc(num_agents*10, sizeof(float));
-    net->map_conv1 = make_conv2d(weights, num_agents, 15, 11, 59, 64, 5, 3);
-    net->map_relu = make_relu(num_agents, 64*3*4);
-    net->map_conv2 = make_conv2d(weights, num_agents, 4, 3, 64, 64, 3, 1);
+    net->map_conv1 = make_conv2d(weights, num_agents, 15, 11, 59, 128, 5, 3);
+    net->map_relu = make_relu(num_agents, 128*3*4);
+    net->map_conv2 = make_conv2d(weights, num_agents, 4, 3, 128, 128, 3, 1);
     net->player_embed = make_embedding(weights, num_agents*47, 128, 32);
-    net->proj_buffer = calloc(num_agents*1689, sizeof(float));
-    net->proj = make_linear(weights, num_agents, 1689, hidden);
+    net->proj_buffer = calloc(num_agents*1817, sizeof(float));
+    net->proj = make_linear(weights, num_agents, 1817, hidden);
     net->proj_relu = make_relu(num_agents, hidden);
     net->actor = make_linear(weights, num_agents, hidden, 26);
     net->value_fn = make_linear(weights, num_agents, hidden, 1);
@@ -144,8 +144,10 @@ void forward(MMONet* net, unsigned char* observations, int* actions) {
 }
 
 void demo(int num_players) {
-    Weights* weights = load_weights("resources/nmmo3/nmmo_2025.bin", 1101403);
+    Weights* weights = load_weights("resources/nmmo3/nmmo3_weights.bin", 3387547);
     MMONet* net = init_mmonet(weights, num_players);
+    printf("weights idx: %d\n", weights->idx);
+    exit(0);
 
     MMO env = {
         .client = NULL,

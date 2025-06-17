@@ -26,8 +26,8 @@
 #define SCORE_SOFT_DROP 1
 #define REWARD_SOFT_DROP 0.01f
 #define SCORE_HARD_DROP 2
-#define REWARD_HARD_DROP 0.02f;
-#define REWARD_INVALID_ACTION -0.1f
+#define REWARD_HARD_DROP 0.02f
+#define REWARD_INVALID_ACTION 0.0f
 
 const int SCORE_COMBO[5] = {0, 100, 300, 500, 1000};
 const float REWARD_COMBO[5] = {0, 0.1, 0.3, 0.5, 1.0};
@@ -459,7 +459,7 @@ Client *make_client(Tetris *env) {
 	client->preview_target_col = env->n_cols / 2;
 	client->preview_target_rotation = 0;
 	InitWindow(SQUARE_SIZE * client->total_cols, SQUARE_SIZE * client->total_rows, "PufferLib Tetris");
-	SetTargetFPS(5);
+	SetTargetFPS(10);
 	return client;
 }
 

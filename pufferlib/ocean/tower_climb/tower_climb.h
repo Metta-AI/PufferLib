@@ -57,11 +57,11 @@
 #define TEST_BIT(mask, i)   ( ((mask)[(i)/8] & (1 << ((i)%8))) != 0 )
 
 // BFS
-#define MAX_BFS_SIZE 70000000
+#define MAX_BFS_SIZE 10000000
 #define MAX_NEIGHBORS 6 // based on action space
 
 // hash table 
-#define TABLE_SIZE 70000003
+#define TABLE_SIZE 10000003
 
 // direction vectors
 #define NUM_DIRECTIONS 4
@@ -1226,7 +1226,6 @@ typedef enum {
 struct Client {
     float width;
     float height;
-    Texture2D puffers;
     Texture2D background;
     Camera3D camera;
     Model robot;
@@ -1320,11 +1319,10 @@ Client* make_client(CTowerClimb* env) {
     client->camera.projection = CAMERA_PERSPECTIVE;
     // load background
     client->background = LoadTexture("resources/tower_climb/space2.jpg");
-    client->puffers = LoadTexture("resources/puffers_128.png");
     // load robot & cube models
     client->robot = LoadModel("resources/tower_climb/small_astro.glb");
     client->cube = LoadModel("resources/tower_climb/spacerock.glb");
-    client->puffer = LoadModel("resources/tower_climb/puffer.glb");
+    client->puffer = LoadModel("resources/shared/puffer.glb");
     printf("Loaded puffer.glb with %d meshes and %d materials\n", client->puffer.meshCount, client->puffer.materialCount);
     if (client->puffer.meshCount == 0) {
         printf("WARNING: puffer.glb failed to load, trying puffer.usdz...\n");
@@ -2137,9 +2135,16 @@ void c_render(CTowerClimb* env) {
 }
 
 void close_client(Client* client) {
-    UnloadShader(client->shader);
-    CloseWindow();
+    // First unload all animations
+    UnloadModelAnimations(client->animations, 8);  // We know we have 8 animations
+    // Then unload models (which will also unload their materials and meshes)
     UnloadModel(client->robot);
     UnloadModel(client->puffer);
+    UnloadModel(client->cube);
+    // Unload shader
+    UnloadShader(client->shader);
+    // Unload texture
+    UnloadTexture(client->background);
+    CloseWindow();
     free(client);
 }

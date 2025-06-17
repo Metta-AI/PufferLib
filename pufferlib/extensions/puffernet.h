@@ -69,8 +69,15 @@ float* get_weights(Weights* weights, int num_weights) {
 // PufferNet implementation of PyTorch functions
 // These are tested against the PyTorch implementation
 void _relu(float* input, float* output, int size) {
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++) {
         output[i] = fmaxf(0.0f, input[i]);
+    }
+}
+
+void _gelu(float* input, float* output, int size) {
+    for (int i = 0; i < size; i++) {
+        output[i] = 0.5f*input[i]*(1 + tanhf(0.6628526501011142 * (input[i] + 0.044715f*input[i]*input[i]*input[i])));
+    }
 }
 
 float _sigmoid(float x);
@@ -298,6 +305,7 @@ void _softmax_multidiscrete(float* input, int* output, int batch_size, int logit
             }
             float prob = rand() / (float)RAND_MAX;
             float logit_prob = 0;
+            output[out_adr] = 0;
             for (int i = 0; i < num_action_types; i++) {
                 logit_prob += expf(input[in_adr + i]) / logit_exp_sum;
                 if (prob < logit_prob) {
@@ -306,6 +314,21 @@ void _softmax_multidiscrete(float* input, int* output, int batch_size, int logit
                 }
             }
             in_adr += num_action_types;
+        }
+    }
+}
+
+void _max_dim1(float* input, float* output, int batch_size, int seq_len, int feature_dim) {
+    for (int b = 0; b < batch_size; b++) {
+        for (int f = 0; f < feature_dim; f++) {
+            float max_val = input[b*seq_len*feature_dim + f];
+            for (int s = 1; s < seq_len; s++) {
+                float val = input[b*seq_len*feature_dim + s*feature_dim + f];
+                if (val > max_val) {
+                    max_val = val;
+                }
+            }
+            output[b*feature_dim + f] = max_val;
         }
     }
 }
@@ -365,6 +388,52 @@ ReLU* make_relu(int batch_size, int input_dim) {
 
 void relu(ReLU* layer, float* input) {
     _relu(input, layer->output, layer->batch_size*layer->input_dim);
+}
+
+typedef struct GELU GELU;
+struct GELU {
+    float* output;
+    int batch_size;
+    int input_dim;
+};
+
+GELU* make_gelu(int batch_size, int input_dim) {
+    size_t buffer_size = batch_size*input_dim*sizeof(float);
+    GELU* layer = calloc(1, sizeof(GELU) + buffer_size);
+    *layer = (GELU){
+        .output = (float*)(layer + 1),
+        .batch_size = batch_size,
+        .input_dim = input_dim,
+    };
+    return layer;
+}
+
+void gelu(GELU* layer, float* input) {
+    _gelu(input, layer->output, layer->batch_size*layer->input_dim);
+}
+
+typedef struct MaxDim1 MaxDim1;
+struct MaxDim1 {
+    float* output;
+    int batch_size;
+    int seq_len;
+    int feature_dim;
+};
+
+MaxDim1* make_max_dim1(int batch_size, int seq_len, int feature_dim) {
+    size_t buffer_size = batch_size*feature_dim*sizeof(float);
+    MaxDim1* layer = calloc(1, sizeof(MaxDim1) + buffer_size);
+    *layer = (MaxDim1){
+        .output = (float*)(layer + 1),
+        .batch_size = batch_size,
+        .seq_len = seq_len,
+        .feature_dim = feature_dim,
+    };
+    return layer;
+}
+
+void max_dim1(MaxDim1* layer, float* input) {
+    _max_dim1(input, layer->output, layer->batch_size, layer->seq_len, layer->feature_dim);
 }
 
 typedef struct Conv2D Conv2D;
@@ -636,7 +705,7 @@ struct LinearLSTM {
     int num_agents;
     float* obs;
     Linear* encoder;
-    ReLU* relu1;
+    GELU* gelu1;
     LSTM* lstm;
     Linear* actor;
     Linear* value_fn;
@@ -648,7 +717,7 @@ LinearLSTM* make_linearlstm(Weights* weights, int num_agents, int input_dim, int
     net->num_agents = num_agents;
     net->obs = calloc(num_agents*input_dim, sizeof(float));
     net->encoder = make_linear(weights, num_agents, input_dim, 128);
-    net->relu1 = make_relu(num_agents, 128);
+    net->gelu1 = make_gelu(num_agents, 128);
     int atn_sum = 0;
     for (int i = 0; i < num_actions; i++) {
         atn_sum += logit_sizes[i];
@@ -663,7 +732,7 @@ LinearLSTM* make_linearlstm(Weights* weights, int num_agents, int input_dim, int
 void free_linearlstm(LinearLSTM* net) {
     free(net->obs);
     free(net->encoder);
-    free(net->relu1);
+    free(net->gelu1);
     free(net->actor);
     free(net->value_fn);
     free(net->lstm);
@@ -673,8 +742,8 @@ void free_linearlstm(LinearLSTM* net) {
 
 void forward_linearlstm(LinearLSTM* net, float* observations, int* actions) {
     linear(net->encoder, observations);
-    relu(net->relu1, net->encoder->output);
-    lstm(net->lstm, net->relu1->output);
+    gelu(net->gelu1, net->encoder->output);
+    lstm(net->lstm, net->gelu1->output);
     linear(net->actor, net->lstm->state_h);
     linear(net->value_fn, net->lstm->state_h);
     softmax_multidiscrete(net->multidiscrete, net->actor->output, actions);

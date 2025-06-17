@@ -560,7 +560,7 @@ class PuffeRL:
         table.add_column(justify="right", width=13)
 
         table.add_row(
-            f'{b1}PufferLib {b2}2.0.0 {idx[0]*" "}:blowfish:',
+            f'{b1}PufferLib {b2}3.0 {idx[0]*" "}:blowfish:',
             f'{c1}CPU: {b2}{np.mean(self.utilization.cpu_util):.1f}{c2}%',
             f'{c1}GPU: {b2}{np.mean(self.utilization.gpu_util):.1f}{c2}%',
             f'{c1}DRAM: {b2}{np.mean(self.utilization.cpu_mem):.1f}{c2}%',
@@ -1098,6 +1098,8 @@ def load_policy(args, vecenv):
         else:
             raise pufferlib.APIUsageError('No run id provided for eval')
 
+        state_dict = torch.load(path, map_location=device)
+        state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
         policy.load_state_dict(torch.load(path, map_location=device))
 
     load_path = args['load_model_path']
@@ -1105,7 +1107,9 @@ def load_policy(args, vecenv):
         load_path = max(glob.glob("experiments/*.pt"), key=os.path.getctime)
 
     if load_path is not None:
-        policy.load_state_dict(torch.load(load_path, map_location=args['train']['device']))
+        state_dict = torch.load(load_path, map_location=device)
+        state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        policy.load_state_dict(state_dict)
         #state_path = os.path.join(*load_path.split('/')[:-1], 'state.pt')
         #optim_state = torch.load(state_path)['optimizer_state_dict']
         #pufferl.optimizer.load_state_dict(optim_state)

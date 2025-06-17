@@ -27,7 +27,8 @@ if [ "$MODE" = "web" ]; then
         -Wall \
         ./$RAYLIB_NAME/lib/libraylib.a \
         -I./$RAYLIB_NAME/include \
-        -I./pufferlib\
+        -I./pufferlib/extensions \
+        -I./pufferlib \
         -L. \
         -L./$RAYLIB_NAME/lib \
         -sASSERTIONS=2 \
@@ -39,11 +40,16 @@ if [ "$MODE" = "web" ]; then
         -s FORCE_FILESYSTEM=1 \
         --shell-file ./scripts/minshell.html \
         -sINITIAL_MEMORY=512MB \
+        -sALLOW_MEMORY_GROWTH \
         -sSTACK_SIZE=512KB \
         -DPLATFORM_WEB \
         -DGRAPHICS_API_OPENGL_ES3 \
-        --preload-file pufferlib/resources@resources/ 
+        --preload-file pufferlib/resources/$1@resources/$1 \
+        --preload-file pufferlib/resources/shared@resources/shared 
     echo "Web build completed: $WEB_OUTPUT_DIR/game.html"
+    echo "Preloaded files:"
+    echo "  pufferlib/resources/$1@resources$1"
+    echo "  pufferlib/resources/shared@resources/shared"
     exit 0
 fi
 
@@ -55,6 +61,7 @@ FLAGS=(
     ./$RAYLIB_NAME/lib/libraylib.a
     -lm
     -lpthread
+    -ferror-limit=3
     -DPLATFORM_DESKTOP
 )
 
